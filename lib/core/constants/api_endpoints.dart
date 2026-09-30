@@ -59,4 +59,12 @@ class ApiEndpoints {
 
   // Wallet Transactions
   static const String userWalletTransactions = '/user/wallet/transactions';
+
+  // Payment Gateway & Manual Proof Endpoints
+  static const String uploadPaymentProof = '/payments/proof';
+  static String paymentStatus(String orderId) => '/payments/status/$orderId';
+  static const String createXenditPayment = '/payments/xendit/create';
+  static const String createXenditQris = '/payments/xendit/create-qr';
+  static const String simulateXenditPayment = '/payments/xendit/simulate';
+  static String xenditPaymentStatus(String orderId) => '/payments/xendit/status/$orderId';
 }

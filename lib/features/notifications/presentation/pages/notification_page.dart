@@ -94,6 +94,22 @@ class _NotificationPageState extends State<NotificationPage> {
         iconColor = AppColors.primary;
         bgColor = AppColors.primary.withAlpha(25);
         break;
+      case 'payment_success':
+        iconData = LucideIcons.creditCard;
+        iconColor = Colors.green;
+        bgColor = Colors.green.withAlpha(25);
+        break;
+      case 'payment_expired':
+      case 'order_cancelled':
+        iconData = LucideIcons.triangleAlert;
+        iconColor = AppColors.error;
+        bgColor = AppColors.error.withAlpha(25);
+        break;
+      case 'courier_tip_received':
+        iconData = LucideIcons.gift;
+        iconColor = Colors.amber.shade800;
+        bgColor = Colors.amber.withAlpha(25);
+        break;
       default:
         iconData = LucideIcons.bell;
         iconColor = AppColors.textSecondary;

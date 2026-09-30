@@ -83,14 +83,8 @@ class AuthRepository implements IAuthRepository {
 
     if (response is Map<String, dynamic>) {
       final data = response['data'] ?? response;
-      final token = data['token']?.toString() ?? '';
       final userMap = (data['user'] ?? data) as Map<String, dynamic>;
       final user = UserModel.fromJson(userMap);
-
-      if (token.isNotEmpty) {
-        _apiClient.setAuthToken(token);
-        await SessionService.saveSession(token: token, user: user);
-      }
       return user;
     }
 

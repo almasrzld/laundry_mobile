@@ -12,8 +12,9 @@ import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   final IAuthRepository? authRepository;
+  final String? initialEmail;
 
-  const LoginPage({super.key, this.authRepository});
+  const LoginPage({super.key, this.authRepository, this.initialEmail});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -21,8 +22,8 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   late final IAuthRepository _authRepository;
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  late final TextEditingController _emailController;
+  late final TextEditingController _passwordController;
   bool _obscurePassword = true;
   bool _isLoading = false;
 
@@ -36,6 +37,8 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     _authRepository = widget.authRepository ?? AuthRepository();
+    _emailController = TextEditingController(text: widget.initialEmail ?? '');
+    _passwordController = TextEditingController();
   }
 
   @override
@@ -352,7 +355,7 @@ class _LoginPageState extends State<LoginPage> {
                         keyboardType: TextInputType.emailAddress,
                         enabled: _lockoutSeconds == 0 && !_isLoading,
                         decoration: const InputDecoration(
-                          hintText: 'nama@domain.com',
+                          hintText: 'Email Pelanggan',
                           prefixIcon: Icon(LucideIcons.mail, size: 18),
                         ),
                       ),
@@ -416,7 +419,6 @@ class _LoginPageState extends State<LoginPage> {
                         text: _lockoutSeconds > 0
                             ? 'Terkunci ($_lockoutSeconds dtk)'
                             : 'Masuk Akun',
-                        icon: LucideIcons.logIn,
                         isLoading: _isLoading,
                         onPressed: _lockoutSeconds > 0 ? null : _handleLogin,
                       ),

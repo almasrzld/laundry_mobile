@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/app_toast.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../data/repositories/auth_repository.dart';
 
@@ -149,12 +150,7 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
       if (!mounted) return;
       Navigator.pop(context);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.success,
-          content: Text(msg),
-        ),
-      );
+      AppToast.showSuccess(context, msg);
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -310,14 +306,13 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
         TextField(
           controller: _identifierController,
           decoration: const InputDecoration(
-            hintText: 'nama@domain.com atau 08123456789',
+            hintText: 'Email atau No. HP Anda',
             prefixIcon: Icon(LucideIcons.userCheck, size: 18),
           ),
         ),
         const SizedBox(height: 24),
         CustomButton(
           text: 'Lanjutkan',
-          icon: LucideIcons.arrowRight,
           isLoading: _isLoading,
           onPressed: _handleStep1,
         ),
@@ -385,7 +380,6 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
 
         CustomButton(
           text: 'Verifikasi Jawaban',
-          icon: LucideIcons.checkCheck,
           isLoading: _isLoading,
           onPressed: _handleStep2,
         ),
@@ -429,7 +423,6 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
 
         CustomButton(
           text: 'Simpan Kata Sandi Baru',
-          icon: LucideIcons.save,
           isLoading: _isLoading,
           onPressed: _handleStep3,
         ),

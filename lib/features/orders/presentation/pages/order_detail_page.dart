@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/session_service.dart';
+import '../../../../core/utils/app_toast.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/launcher_helper.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../../data/models/order_model.dart';
 import '../../../../data/models/user_model.dart';
+import '../../../../data/models/payment_model.dart';
 import '../../../../data/repositories/order_repository.dart';
+import '../../../../data/repositories/payment_repository.dart';
+import '../widgets/payment_proof_upload_sheet.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final OrderModel? order;
@@ -28,14 +32,17 @@ class OrderDetailPage extends StatefulWidget {
 
 class _OrderDetailPageState extends State<OrderDetailPage> {
   late final IOrderRepository _orderRepository;
+  late final IPaymentRepository _paymentRepository;
   OrderModel? _currentOrder;
   UserModel? _currentUser;
+  XenditPaymentResultModel? _paymentDetails;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _orderRepository = widget.orderRepository ?? OrderRepository();
+    _paymentRepository = PaymentRepository();
     _currentOrder = widget.order;
     _refreshDetail();
   }
@@ -58,11 +65,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       _isLoading = _currentOrder == null;
     });
     final fresh = await _orderRepository.getOrderById(effectiveId);
+    final paymentInfo = await _paymentRepository.getPaymentDetails(effectiveId);
     if (mounted) {
       setState(() {
         if (fresh != null) {
           _currentOrder = fresh;
         }
+        _paymentDetails = paymentInfo;
         _currentUser = user;
         _isLoading = false;
       });
@@ -490,6 +499,107 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 12),
+
+                        // Status Verifikasi & Upload Bukti Pembayaran
+                        Builder(
+                          builder: (context) {
+                            final isPaid = order.notes.toUpperCase().contains('LUNAS') ||
+                                _paymentDetails?.status == 'PAID';
+                            final hasProof = _paymentDetails?.proofImage != null &&
+                                _paymentDetails!.proofImage!.isNotEmpty;
+                            final isCash = order.notes.toLowerCase().contains('tunai') ||
+                                order.notes.toLowerCase().contains('cash') ||
+                                order.notes.toLowerCase().contains('cod');
+
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isPaid
+                                    ? AppColors.success.withValues(alpha: 0.08)
+                                    : hasProof
+                                        ? AppColors.warning.withValues(alpha: 0.08)
+                                        : AppColors.primaryLight.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isPaid
+                                      ? AppColors.success.withValues(alpha: 0.3)
+                                      : hasProof
+                                          ? AppColors.warning.withValues(alpha: 0.4)
+                                          : AppColors.primary.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            isPaid
+                                                ? LucideIcons.circleCheck
+                                                : (hasProof ? LucideIcons.clock : LucideIcons.receipt),
+                                            size: 15,
+                                            color: isPaid
+                                                ? AppColors.success
+                                                : (hasProof ? AppColors.warning : AppColors.primary),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            isPaid
+                                                ? 'Pembayaran Lunas'
+                                                : (hasProof ? 'Menunggu Verifikasi Admin' : 'Status: Menunggu Pembayaran'),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: isPaid
+                                                  ? AppColors.success
+                                                  : (hasProof ? AppColors.warning : AppColors.primary),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      if (!isPaid && !isCash)
+                                        ElevatedButton.icon(
+                                          onPressed: () {
+                                            PaymentProofUploadSheet.show(
+                                              context,
+                                              orderId: order.id,
+                                              invoiceNo: order.invoiceNo,
+                                              totalAmount: order.totalAmount,
+                                              onUploadedSuccess: () => _refreshDetail(),
+                                            );
+                                          },
+                                          icon: const Icon(LucideIcons.uploadCloud, size: 12, color: Colors.white),
+                                          label: Text(
+                                            hasProof ? 'Ganti Bukti' : 'Upload Bukti',
+                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.primary,
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            elevation: 0,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  if (hasProof && !isPaid) ...[
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'Bukti transfer (WebP \u2264 1MB) berhasil diunggah dan sedang diperiksa oleh kasir/admin.',
+                                      style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -632,9 +742,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   final ok = await LauncherHelper.openWhatsApp(phone: courierPhone, message: msg);
                   if (!ok && mounted) {
                     LauncherHelper.copyToClipboard(courierPhone);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Nomor kurir ($courierPhone) berhasil disalin ke clipboard.')),
-                    );
+                    AppToast.showInfo(context, 'Nomor kurir ($courierPhone) berhasil disalin ke clipboard.');
                   }
                 },
               ),
@@ -667,9 +775,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   final ok = await LauncherHelper.openPhoneCall(courierPhone);
                   if (!ok && mounted) {
                     LauncherHelper.copyToClipboard(courierPhone);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Nomor kurir ($courierPhone) telah disalin ke clipboard.')),
-                    );
+                    AppToast.showInfo(context, 'Nomor kurir ($courierPhone) telah disalin ke clipboard.');
                   }
                 },
               ),
@@ -700,12 +806,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   LauncherHelper.copyToClipboard(courierPhone);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Nomor kurir $courierPhone berhasil disalin!'),
-                      backgroundColor: const Color(0xFF0284C7),
-                    ),
-                  );
+                  AppToast.showSuccess(context, 'Nomor kurir $courierPhone berhasil disalin!');
                 },
               ),
             ],
@@ -831,9 +932,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                 final ok = await LauncherHelper.openWhatsApp(phone: csPhone, message: msg);
                                 if (!ok && mounted) {
                                   LauncherHelper.copyToClipboard(csPhone);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Nomor CS disalin. Silakan buka aplikasi WhatsApp.')),
-                                  );
+                                  AppToast.showInfo(context, 'Nomor CS disalin. Silakan buka aplikasi WhatsApp.');
                                 }
                               },
                               icon: const Icon(LucideIcons.messageSquare, size: 16),
@@ -851,12 +950,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                           IconButton.outlined(
                             onPressed: () {
                               LauncherHelper.copyToClipboard(csPhone);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Nomor WhatsApp CS berhasil disalin!'),
-                                  backgroundColor: Color(0xFF16A34A),
-                                ),
-                              );
+                              AppToast.showSuccess(context, 'Nomor WhatsApp CS berhasil disalin!');
                             },
                             icon: const Icon(LucideIcons.copy, size: 18, color: Color(0xFF166534)),
                             style: IconButton.styleFrom(
@@ -892,9 +986,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                     final ok = await LauncherHelper.openPhoneCall(csPhone);
                     if (!ok && mounted) {
                       LauncherHelper.copyToClipboard(csPhone);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Nomor hotline CS disalin ke clipboard.')),
-                      );
+                      AppToast.showInfo(context, 'Nomor hotline CS disalin ke clipboard.');
                     }
                   },
                 ),
@@ -1453,21 +1545,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                 if (success) {
                                   await _refreshDetail();
                                   if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Ulasan & tips Anda berhasil disimpan. Terima kasih!'),
-                                      backgroundColor: Color(0xFF059669),
-                                    ),
-                                  );
+                                  AppToast.showSuccess(context, 'Ulasan & tips Anda berhasil disimpan. Terima kasih!');
 
                                   // Jika rating tinggi (4 atau 5), ajak ulas di Play Store / App Store
                                   if (selectedRating >= 4) {
                                     _showAppStoreRatingDialog();
                                   }
                                 } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Gagal mengirim ulasan. Silakan coba lagi.')),
-                                  );
+                                  AppToast.showError(context, 'Gagal mengirim ulasan. Silakan coba lagi.');
                                 }
                               },
                         style: ElevatedButton.styleFrom(

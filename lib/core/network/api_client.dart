@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../constants/api_endpoints.dart';
 import '../services/session_manager.dart';
 import '../services/session_service.dart';
@@ -138,6 +139,57 @@ class ApiClient {
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException('Terjadi kesalahan request: $e');
+    }
+  }
+
+  Future<dynamic> uploadMultipart(
+    String endpoint, {
+    required String fieldName,
+    required List<int> fileBytes,
+    required String filename,
+    Map<String, String>? fields,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl$endpoint');
+      await _ensureToken();
+      final request = http.MultipartRequest('POST', uri);
+
+      if (_authToken != null && _authToken!.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $_authToken';
+      }
+      request.headers['Accept'] = 'application/json';
+
+      if (fields != null) {
+        request.fields.addAll(fields);
+      }
+
+      MediaType? contentType;
+      final lowerName = filename.toLowerCase();
+      if (lowerName.endsWith('.png')) {
+        contentType = MediaType('image', 'png');
+      } else if (lowerName.endsWith('.webp')) {
+        contentType = MediaType('image', 'webp');
+      } else {
+        contentType = MediaType('image', 'jpeg');
+      }
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          fieldName,
+          fileBytes,
+          filename: filename,
+          contentType: contentType,
+        ),
+      );
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
+      return _processResponse(response);
+    } on SocketException {
+      throw NetworkException();
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Terjadi kesalahan saat mengunggah file: $e');
     }
   }
 
