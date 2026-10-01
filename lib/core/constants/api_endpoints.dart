@@ -16,22 +16,28 @@ class ApiEndpoints {
   static const String forgotPasswordVerify = '/auth/forgot-password/verify';
   static const String forgotPasswordReset = '/auth/forgot-password/reset';
 
-  // User Profile & Addresses
+  // User Profile, Addresses, Points & Vouchers
   static const String userProfile = '/user/profile';
   static const String userChangePassword = '/user/change-password';
   static const String userAddresses = '/user/addresses';
   static const String userPointsHistory = '/user/points/history';
   static const String userPointsRedeem = '/user/points/redeem';
+  static const String userVouchers = '/user/vouchers';
+  static const String verifyVoucher = '/user/vouchers/verify';
 
   // Services Endpoints
   static const String services = '/services';
   static const String serviceCategories = '/master/service-categories';
   static String serviceDetail(String id) => '/services/$id';
 
-  // Master Data (Perfumes, Units, Payment Methods, Order Statuses)
+  // Master Data (Perfumes, Units, Payment Methods, Order Statuses, Outlets, Ongkirs)
+  static const String units = '/master/units';
   static const String perfumes = '/master/perfumes';
   static const String paymentMethods = '/master/payment-methods';
   static const String orderStatuses = '/master/order-statuses';
+  static const String outlets = '/master/outlets';
+  static const String ongkirs = '/master/ongkirs';
+  static const String calculateOngkir = '/master/ongkirs/calculate';
 
   // Orders Endpoints
   static const String orders = '/orders';

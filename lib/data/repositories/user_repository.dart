@@ -2,6 +2,7 @@ import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exceptions.dart';
 import '../../core/services/session_service.dart';
+import '../models/promo_model.dart';
 import '../models/user_model.dart';
 import '../models/wallet_transaction_model.dart';
 
@@ -26,9 +27,16 @@ abstract class IUserRepository {
   Future<List<PointHistoryModel>> getPointHistories();
   Future<Map<String, dynamic>> redeemPoints({
     required int points,
+    String? code,
     String? title,
+    String? subtitle,
     String? description,
+    int? discountAmount,
+    int? minOrderAmount,
+    String? promosId,
   });
+  Future<List<PromoModel>> getUserVouchers({bool activeOnly = false});
+  Future<PromoModel> verifyVoucher(String code);
   Future<List<WalletTransactionModel>> getWalletTransactions({int limit = 50});
 }
 
@@ -167,12 +175,25 @@ class UserRepository implements IUserRepository {
   @override
   Future<Map<String, dynamic>> redeemPoints({
     required int points,
+    String? code,
     String? title,
+    String? subtitle,
     String? description,
+    int? discountAmount,
+    int? minOrderAmount,
+    String? promosId,
   }) async {
     final body = <String, dynamic>{'points': points};
+    if (code != null) {
+      body['code'] = code;
+      body['code_voucher'] = code;
+    }
     if (title != null) body['title'] = title;
+    if (subtitle != null) body['subtitle'] = subtitle;
     if (description != null) body['description'] = description;
+    if (discountAmount != null) body['discount_amount'] = discountAmount;
+    if (minOrderAmount != null) body['min_order_amount'] = minOrderAmount;
+    if (promosId != null) body['promos_id'] = promosId;
 
     final response = await _apiClient.post(
       ApiEndpoints.userPointsRedeem,
@@ -182,6 +203,42 @@ class UserRepository implements IUserRepository {
       return response;
     }
     return {'success': true};
+  }
+
+  @override
+  Future<List<PromoModel>> getUserVouchers({bool activeOnly = false}) async {
+    try {
+      final response = await _apiClient.get(
+        ApiEndpoints.userVouchers,
+        queryParams: activeOnly ? {'active_only': 'true'} : null,
+      );
+      List<PromoModel> list = [];
+      if (response is List) {
+        list = response.map((item) => PromoModel.fromJson(item as Map<String, dynamic>)).toList();
+      } else if (response is Map && response['data'] is List) {
+        list = (response['data'] as List)
+            .map((item) => PromoModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<PromoModel> verifyVoucher(String code) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.verifyVoucher,
+      body: {'code': code.trim().toUpperCase()},
+    );
+
+    if (response is Map<String, dynamic>) {
+      final data = response['data'] ?? response;
+      return PromoModel.fromJson(data as Map<String, dynamic>);
+    }
+
+    throw ApiException('Kode voucher tidak valid atau belum Anda tukarkan.');
   }
 
   @override

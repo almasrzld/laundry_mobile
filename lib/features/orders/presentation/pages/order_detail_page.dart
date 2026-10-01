@@ -13,6 +13,7 @@ import '../../../../data/models/payment_model.dart';
 import '../../../../data/repositories/order_repository.dart';
 import '../../../../data/repositories/payment_repository.dart';
 import '../widgets/payment_proof_upload_sheet.dart';
+import 'package:laundry_app/features/services/presentation/widgets/xendit_qris_sheet.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final OrderModel? order;
@@ -511,6 +512,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                             final isCash = order.notes.toLowerCase().contains('tunai') ||
                                 order.notes.toLowerCase().contains('cash') ||
                                 order.notes.toLowerCase().contains('cod');
+                            final isQris = order.notes.toLowerCase().contains('qris') ||
+                                (_paymentDetails?.paymentMethod.toLowerCase().contains('qris') ?? false);
 
                             return Container(
                               padding: const EdgeInsets.all(12),
@@ -562,29 +565,54 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                         ],
                                       ),
                                       if (!isPaid && !isCash)
-                                        ElevatedButton.icon(
-                                          onPressed: () {
-                                            PaymentProofUploadSheet.show(
-                                              context,
-                                              orderId: order.id,
-                                              invoiceNo: order.invoiceNo,
-                                              totalAmount: order.totalAmount,
-                                              onUploadedSuccess: () => _refreshDetail(),
-                                            );
-                                          },
-                                          icon: const Icon(LucideIcons.uploadCloud, size: 12, color: Colors.white),
-                                          label: Text(
-                                            hasProof ? 'Ganti Bukti' : 'Upload Bukti',
-                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppColors.primary,
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                            elevation: 0,
-                                          ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (isQris) ...[
+                                              ElevatedButton.icon(
+                                                onPressed: () => _openQrisSheet(order),
+                                                icon: const Icon(LucideIcons.qrCode, size: 12, color: Colors.white),
+                                                label: const Text(
+                                                  'Bayar QRIS',
+                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                                ),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: AppColors.primary,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                  minimumSize: Size.zero,
+                                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  elevation: 0,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                            ],
+                                            ElevatedButton.icon(
+                                              onPressed: () {
+                                                PaymentProofUploadSheet.show(
+                                                  context,
+                                                  orderId: order.id,
+                                                  invoiceNo: order.invoiceNo,
+                                                  totalAmount: order.totalAmount,
+                                                  onUploadedSuccess: () => _refreshDetail(),
+                                                );
+                                              },
+                                              icon: const Icon(LucideIcons.uploadCloud, size: 12, color: Colors.white),
+                                              label: Text(
+                                                hasProof ? 'Ganti Bukti' : 'Upload Bukti',
+                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                              ),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: isQris ? AppColors.surfaceVariant : AppColors.primary,
+                                                foregroundColor: isQris ? AppColors.textPrimary : Colors.white,
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                minimumSize: Size.zero,
+                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                elevation: 0,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                     ],
                                   ),
@@ -638,6 +666,27 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         ),
       ],
     );
+  }
+
+  Future<void> _openQrisSheet(OrderModel order) async {
+    try {
+      AppToast.showInfo(context, 'Memuat QRIS...');
+      final payment = await _paymentRepository.createXenditPayment(order.id, paymentMethod: 'QRIS');
+      if (!mounted) return;
+      XenditQrisSheet.show(
+        context,
+        payment: payment,
+        paymentRepository: _paymentRepository,
+        onPaymentSuccess: () {
+          _refreshDetail();
+          AppToast.showSuccess(context, 'Pembayaran berhasil diverifikasi otomatis!');
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        AppToast.showError(context, 'Gagal memuat QRIS: $e');
+      }
+    }
   }
 
   void _showCourierContactSheet(OrderModel order) {

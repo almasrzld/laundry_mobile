@@ -40,7 +40,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   late final IUserRepository _userRepository;
   late final IAuthRepository _authRepository;
-  late final IPromoRepository _promoRepository;
   late final IServiceRepository _serviceRepository;
   UserModel _user = UserModel.empty;
   bool _isLoading = true;
@@ -50,7 +49,6 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     _userRepository = widget.userRepository ?? UserRepository();
     _authRepository = widget.authRepository ?? AuthRepository();
-    _promoRepository = widget.promoRepository ?? PromoRepository();
     _serviceRepository = widget.serviceRepository ?? ServiceRepository();
     _loadProfile();
   }
@@ -882,28 +880,36 @@ class _ProfilePageState extends State<ProfilePage> {
         builder: (sheetCtx, setSheetState) {
           final redeemVouchers = [
             {
+              'title': 'Voucher Bebas Biaya Antar-Jemput',
+              'desc': 'Min. transaksi Rp 25.000',
+              'code': 'GRATISONGKIR',
+              'points': 50,
+              'discount_amount': 10000,
+              'min_order_amount': 25000,
+            },
+            {
               'title': 'Voucher Diskon Rp 10.000',
               'desc': 'Min. transaksi Rp 30.000',
               'code': 'DISKON10RB',
               'points': 100,
+              'discount_amount': 10000,
+              'min_order_amount': 30000,
             },
             {
               'title': 'Voucher Diskon Rp 20.000',
               'desc': 'Min. transaksi Rp 50.000',
               'code': 'BERSIHSEGAR20',
               'points': 200,
+              'discount_amount': 20000,
+              'min_order_amount': 50000,
             },
             {
               'title': 'Voucher Diskon 25% Akhir Pekan',
               'desc': 'Min. transaksi Rp 40.000',
               'code': 'WEEKENDSERU',
               'points': 300,
-            },
-            {
-              'title': 'Voucher Bebas Biaya Antar-Jemput',
-              'desc': 'Min. transaksi Rp 25.000',
-              'code': 'GRATISONGKIR',
-              'points': 50,
+              'discount_amount': 15000,
+              'min_order_amount': 40000,
             },
           ];
 
@@ -1097,8 +1103,11 @@ class _ProfilePageState extends State<ProfilePage> {
                                     try {
                                       await _userRepository.redeemPoints(
                                         points: pointsRequired,
-                                        title: 'Tukar ${v['title']} (-$pointsRequired Poin)',
-                                        description: 'Penukaran kode voucher $code',
+                                        code: code,
+                                        title: v['title'] as String,
+                                        subtitle: v['desc'] as String,
+                                        discountAmount: v['discount_amount'] as int,
+                                        minOrderAmount: v['min_order_amount'] as int,
                                       );
                                       await _loadProfile();
                                       setSheetState(() {});
@@ -1106,9 +1115,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                       if (mounted) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('Selamat! Berhasil menukarkan $pointsRequired poin. Kode "$code" telah disalin!'),
+                                            content: Text('Selamat! Berhasil menukarkan $pointsRequired poin. Voucher "$code" tersimpan di akun Anda & kode telah disalin!'),
                                             backgroundColor: const Color(0xFF059669),
-                                            duration: const Duration(seconds: 3),
+                                            duration: const Duration(seconds: 4),
                                           ),
                                         );
                                       }
@@ -1445,6 +1454,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final searchCtrl = TextEditingController();
     String? promoNotice;
     bool isValidPromo = false;
+    bool isCheckingPromo = false;
 
     showModalBottomSheet(
       context: context,
@@ -1489,7 +1499,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              'Kupon diskon siap pakai untuk pesanan cucian Anda',
+                              'Daftar voucher diskon yang sudah Anda miliki dan siap pakai',
                               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                             ),
                           ],
@@ -1527,25 +1537,31 @@ class _ProfilePageState extends State<ProfilePage> {
                                     controller: searchCtrl,
                                     textCapitalization: TextCapitalization.characters,
                                     decoration: const InputDecoration(
-                                      hintText: 'Contoh: WEEKENDSERU',
+                                      hintText: 'Masukkan kode voucher',
                                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 ElevatedButton(
-                                  onPressed: () {
+                                  onPressed: isCheckingPromo ? null : () async {
                                     final code = searchCtrl.text.trim().toUpperCase();
                                     if (code.isEmpty) return;
-                                    setSheetState(() {
-                                      if (code == 'WEEKENDSERU' || code == 'GRATISONGKIR' || code == 'BERSIHSEGAR20') {
-                                        promoNotice = 'Selamat! Kode $code aktif & dapat digunakan saat checkout.';
+                                    setSheetState(() => isCheckingPromo = true);
+                                    try {
+                                      final v = await _userRepository.verifyVoucher(code);
+                                      setSheetState(() {
+                                        promoNotice = 'Selamat! Voucher "${v.title}" (${v.code}) aktif & siap digunakan!';
                                         isValidPromo = true;
-                                      } else {
-                                        promoNotice = 'Kode voucher "$code" tidak ditemukan atau sudah kedaluwarsa.';
+                                        isCheckingPromo = false;
+                                      });
+                                    } catch (e) {
+                                      setSheetState(() {
+                                        promoNotice = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException: ', '');
                                         isValidPromo = false;
-                                      }
-                                    });
+                                        isCheckingPromo = false;
+                                      });
+                                    }
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primary,
@@ -1553,17 +1569,24 @@ class _ProfilePageState extends State<ProfilePage> {
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
-                                  child: const Text('Cek Kode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  child: isCheckingPromo
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Text('Cek Kode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
                             if (promoNotice != null) ...[
                               const SizedBox(height: 8),
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Icon(
                                     isValidPromo ? LucideIcons.checkCircle2 : LucideIcons.alertCircle,
-                                    size: 14,
+                                    size: 15,
                                     color: isValidPromo ? const Color(0xFF059669) : AppColors.error,
                                   ),
                                   const SizedBox(width: 6),
@@ -1571,7 +1594,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     child: Text(
                                       promoNotice!,
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 11.5,
                                         fontWeight: FontWeight.w500,
                                         color: isValidPromo ? const Color(0xFF065F46) : AppColors.error,
                                       ),
@@ -1586,13 +1609,13 @@ class _ProfilePageState extends State<ProfilePage> {
                       const SizedBox(height: 16),
 
                       const Text(
-                        'Promo Aktif Almas Laundry',
+                        'Voucher Tersimpan di Akun Saya',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
 
                       FutureBuilder<List<PromoModel>>(
-                        future: _promoRepository.getPromos(),
+                        future: _userRepository.getUserVouchers(),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting) {
                             return const Center(
@@ -1603,18 +1626,45 @@ class _ProfilePageState extends State<ProfilePage> {
                             );
                           }
 
-                          final promos = snapshot.data ?? [];
-                          if (promos.isEmpty) {
+                          final vouchers = snapshot.data ?? [];
+                          if (vouchers.isEmpty) {
                             return Container(
-                              padding: const EdgeInsets.all(24),
+                              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+                              margin: const EdgeInsets.only(top: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: AppColors.border),
+                              ),
                               alignment: Alignment.center,
-                              child: const Column(
+                              child: Column(
                                 children: [
-                                  Icon(LucideIcons.ticket, size: 40, color: AppColors.textMuted),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Belum ada voucher aktif saat ini',
-                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                  const Icon(LucideIcons.ticket, size: 44, color: AppColors.textMuted),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'Belum Ada Voucher Ditukarkan',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Tukarkan Poin Rewards Anda sekarang untuk mendapatkan voucher diskon pesanan cucian!',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pop(sheetCtx);
+                                      _showRewardsModal();
+                                    },
+                                    icon: const Icon(LucideIcons.award, size: 16),
+                                    label: const Text('Tukarkan Poin Sekarang', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1622,14 +1672,16 @@ class _ProfilePageState extends State<ProfilePage> {
                           }
 
                           return Column(
-                            children: promos.map((promo) {
+                            children: vouchers.map((promo) {
+                              final isUsed = promo.isUsed;
+
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: AppColors.surface,
+                                  color: isUsed ? const Color(0xFFF9FAFB) : AppColors.surface,
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: AppColors.border),
+                                  border: Border.all(color: isUsed ? const Color(0xFFE5E7EB) : AppColors.border),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1639,10 +1691,14 @@ class _ProfilePageState extends State<ProfilePage> {
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: AppColors.primary.withAlpha(20),
+                                            color: isUsed ? const Color(0xFFF3F4F6) : AppColors.primary.withAlpha(20),
                                             borderRadius: BorderRadius.circular(8),
                                           ),
-                                          child: Icon(promo.icon, color: AppColors.primary, size: 20),
+                                          child: Icon(
+                                            promo.icon,
+                                            color: isUsed ? AppColors.textMuted : AppColors.primary,
+                                            size: 20,
+                                          ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
@@ -1651,10 +1707,14 @@ class _ProfilePageState extends State<ProfilePage> {
                                             children: [
                                               Text(
                                                 promo.title,
-                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isUsed ? AppColors.textSecondary : AppColors.textPrimary,
+                                                ),
                                               ),
                                               Text(
-                                                promo.subtitle,
+                                                promo.subtitle.isNotEmpty ? promo.subtitle : 'Min. transaksi ${CurrencyFormatter.formatRupiah(promo.minOrderAmount)}',
                                                 style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                               ),
                                             ],
@@ -1663,18 +1723,20 @@ class _ProfilePageState extends State<ProfilePage> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFEFF6FF),
+                                            color: isUsed ? const Color(0xFFF3F4F6) : const Color(0xFFEFF6FF),
                                             borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                                            border: Border.all(color: isUsed ? const Color(0xFFE5E7EB) : const Color(0xFFBFDBFE)),
                                           ),
                                           child: Text(
-                                            promo.discountAmount > 0
-                                                ? 'Hemat ${CurrencyFormatter.formatRupiah(promo.discountAmount)}'
-                                                : 'Spesial',
-                                            style: const TextStyle(
-                                              fontSize: 11,
+                                            isUsed
+                                                ? 'Sudah Digunakan'
+                                                : (promo.discountAmount > 0
+                                                    ? 'Hemat ${CurrencyFormatter.formatRupiah(promo.discountAmount)}'
+                                                    : 'Spesial'),
+                                            style: TextStyle(
+                                              fontSize: 10.5,
                                               fontWeight: FontWeight.bold,
-                                              color: AppColors.primary,
+                                              color: isUsed ? AppColors.textMuted : AppColors.primary,
                                             ),
                                           ),
                                         ),
@@ -1696,51 +1758,57 @@ class _ProfilePageState extends State<ProfilePage> {
                                               const Text('KODE: ', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                                               Text(
                                                 promo.code,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.bold,
                                                   letterSpacing: 0.8,
-                                                  color: AppColors.textPrimary,
+                                                  color: isUsed ? AppColors.textMuted : AppColors.textPrimary,
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
-                                        InkWell(
-                                          onTap: () {
-                                            Clipboard.setData(ClipboardData(text: promo.code));
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('Kode voucher "${promo.code}" berhasil disalin!'),
-                                                backgroundColor: AppColors.primary,
-                                                duration: const Duration(seconds: 2),
-                                              ),
-                                            );
-                                          },
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.primary,
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(LucideIcons.copy, size: 14, color: Colors.white),
-                                                SizedBox(width: 6),
-                                                Text(
-                                                  'Salin Kode',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
+                                        if (!isUsed)
+                                          InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: promo.code));
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('Kode voucher "${promo.code}" berhasil disalin!'),
+                                                  backgroundColor: AppColors.primary,
+                                                  duration: const Duration(seconds: 2),
                                                 ),
-                                              ],
+                                              );
+                                            },
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(LucideIcons.copy, size: 14, color: Colors.white),
+                                                  SizedBox(width: 6),
+                                                  Text(
+                                                    'Salin Kode',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
+                                          )
+                                        else
+                                          const Text(
+                                            'Terpakai',
+                                            style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontStyle: FontStyle.italic),
                                           ),
-                                        ),
                                       ],
                                     ),
                                   ],

@@ -22,6 +22,7 @@ import '../../../../data/repositories/notification_repository.dart';
 import '../../../orders/presentation/pages/order_detail_page.dart';
 import '../../../notifications/presentation/pages/notification_page.dart';
 import '../../../courier/presentation/pages/courier_tasks_page.dart';
+import '../../../services/presentation/widgets/order_checkout_sheet.dart';
 
 class HomePage extends StatefulWidget {
   final Function(int)? onNavigateTab;
@@ -1016,7 +1017,16 @@ class _HomePageState extends State<HomePage> {
           final s = _services[index];
           return InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => widget.onNavigateTab?.call(1),
+            onTap: () {
+              OrderCheckoutSheet.show(
+                context,
+                service: s,
+                user: _user,
+                onOrderSuccess: () {
+                  _loadDashboardData(isSilent: true);
+                },
+              );
+            },
             child: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(

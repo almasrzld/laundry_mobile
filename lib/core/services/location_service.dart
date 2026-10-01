@@ -280,4 +280,90 @@ class LocationService {
 
     return 'Lokasi GPS (${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)})';
   }
+
+  /// Forward Geocoding: Mengubah teks alamat menjadi koordinat (latitude & longitude)
+  static Future<Map<String, double>?> geocodeAddress(String rawAddress) async {
+    final clean = rawAddress.trim();
+    if (clean.isEmpty) return null;
+
+    // 1. Bersihkan prefix label apapun di awal seperti "Kos: ", "Kantor: ", "Rumah: ", dll.
+    String text = clean.replaceFirst(RegExp(r'^[^:]+:\s*'), '').trim();
+    if (text.isEmpty) text = clean;
+
+    // 2. Pisahkan bagian alamat berdasarkan koma
+    final rawParts = text.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+
+    // 3. Bersihkan komponen-komponen alamat dari nomor rumah, RT/RW, kode pos, dan kata administratif
+    final cleanedParts = rawParts.map((part) {
+      return part
+          .replaceAll(RegExp(r'\b(no|nomor)\.?\s*\d+[\w-]*\b', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\b(rt|rw)\s*\d+\s*(/\s*(rt|rw)\s*\d+)?\b', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\b\d{5}\b'), '') // 5-digit postal code
+          .replaceAll(RegExp(r'\b(kec\.|kecamatan|kel\.|kelurahan|kota|kab\.|kabupaten|prov\.|provinsi)\b', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+    }).where((p) => p.isNotEmpty).toList();
+
+    // 4. Susun daftar variasi query pencarian dari yang paling presisi hingga fallback
+    final queries = <String>[];
+
+    // Variasi 1: Bersih lengkap tanpa nomor
+    final cleanedFull = cleanedParts.join(', ');
+    if (cleanedFull.isNotEmpty) queries.add(cleanedFull);
+
+    // Variasi 2: Bagian Jalan/Tempat + Kota/Kabupaten (contoh: "Jl. Kolonel Sutarto, Surakarta")
+    if (cleanedParts.length >= 2) {
+      final street = cleanedParts.first;
+      final cityOrDistrict = cleanedParts.length >= 3 ? cleanedParts[cleanedParts.length - 2] : cleanedParts.last;
+      final city = cleanedParts.last;
+
+      queries.add('$street, $city');
+      if (cleanedParts.length >= 3) {
+        queries.add('$street, $cityOrDistrict');
+        queries.add('$street, $cityOrDistrict, $city');
+      }
+    }
+
+    // Variasi 3: Hanya Kecamatan/Kelurahan + Kota (contoh: "Jebres, Surakarta")
+    if (cleanedParts.length >= 2) {
+      for (int i = 1; i < cleanedParts.length; i++) {
+        final part = cleanedParts[i];
+        final city = cleanedParts.last;
+        if (part.toLowerCase() != city.toLowerCase()) {
+          queries.add('$part, $city');
+        }
+      }
+    }
+
+    // Variasi 4: Query asli mentah
+    queries.add(text);
+
+    // Hapus duplikasi query
+    final uniqueQueries = queries.toSet().toList();
+
+    for (final q in uniqueQueries) {
+      try {
+        final encoded = Uri.encodeComponent(q);
+        final uri = Uri.parse('https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=1');
+        final res = await http.get(
+          uri,
+          headers: {'User-Agent': 'AlmasLaundryApp/1.0 (customer-geocoding)'},
+        ).timeout(const Duration(seconds: 4));
+
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data is List && data.isNotEmpty) {
+            final item = data.first;
+            final lat = double.tryParse(item['lat']?.toString() ?? '');
+            final lon = double.tryParse(item['lon']?.toString() ?? '');
+            if (lat != null && lon != null) {
+              return {'lat': lat, 'lon': lon};
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
 }

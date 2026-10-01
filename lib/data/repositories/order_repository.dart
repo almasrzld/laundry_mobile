@@ -15,6 +15,10 @@ abstract class IOrderRepository {
     required int pricePerUnit,
     required String pickupAddress,
     required String deliveryAddress,
+    int deliveryFee = 0,
+    int discount = 0,
+    String? voucherCode,
+    int pointsRedeemed = 0,
     String notes = '',
   });
   Future<bool> submitRating(
@@ -78,6 +82,10 @@ class OrderRepository implements IOrderRepository {
     required int pricePerUnit,
     required String pickupAddress,
     required String deliveryAddress,
+    int deliveryFee = 0,
+    int discount = 0,
+    String? voucherCode,
+    int pointsRedeemed = 0,
     String notes = '',
   }) async {
     final body = {
@@ -86,6 +94,10 @@ class OrderRepository implements IOrderRepository {
       'quantity': quantity,
       'unit': unit,
       'price_per_unit': pricePerUnit,
+      'delivery_fee': deliveryFee,
+      'discount': discount,
+      if (voucherCode != null && voucherCode.trim().isNotEmpty) 'voucher_code': voucherCode.trim(),
+      if (pointsRedeemed > 0) 'points_redeemed': pointsRedeemed,
       'pickup_address': pickupAddress,
       'delivery_address': deliveryAddress,
       'notes': notes,
