@@ -141,7 +141,7 @@ class _HomePageState extends State<HomePage> {
           _services = fetchedServices.take(6).toList();
         }
         if (fetchedPromos != null && fetchedPromos.isNotEmpty) {
-          _promos = fetchedPromos;
+          _promos = fetchedPromos.where((p) => p.isValidPeriod).toList();
         }
         _isLoading = false;
       });

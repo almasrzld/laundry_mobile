@@ -41,6 +41,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late final IUserRepository _userRepository;
   late final IAuthRepository _authRepository;
   late final IServiceRepository _serviceRepository;
+  late final IPromoRepository _promoRepository;
   UserModel _user = UserModel.empty;
   bool _isLoading = true;
 
@@ -50,6 +51,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _userRepository = widget.userRepository ?? UserRepository();
     _authRepository = widget.authRepository ?? AuthRepository();
     _serviceRepository = widget.serviceRepository ?? ServiceRepository();
+    _promoRepository = widget.promoRepository ?? PromoRepository();
     _loadProfile();
   }
 
@@ -878,41 +880,6 @@ class _ProfilePageState extends State<ProfilePage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => StatefulBuilder(
         builder: (sheetCtx, setSheetState) {
-          final redeemVouchers = [
-            {
-              'title': 'Voucher Bebas Biaya Antar-Jemput',
-              'desc': 'Min. transaksi Rp 25.000',
-              'code': 'GRATISONGKIR',
-              'points': 50,
-              'discount_amount': 10000,
-              'min_order_amount': 25000,
-            },
-            {
-              'title': 'Voucher Diskon Rp 10.000',
-              'desc': 'Min. transaksi Rp 30.000',
-              'code': 'DISKON10RB',
-              'points': 100,
-              'discount_amount': 10000,
-              'min_order_amount': 30000,
-            },
-            {
-              'title': 'Voucher Diskon Rp 20.000',
-              'desc': 'Min. transaksi Rp 50.000',
-              'code': 'BERSIHSEGAR20',
-              'points': 200,
-              'discount_amount': 20000,
-              'min_order_amount': 50000,
-            },
-            {
-              'title': 'Voucher Diskon 25% Akhir Pekan',
-              'desc': 'Min. transaksi Rp 40.000',
-              'code': 'WEEKENDSERU',
-              'points': 300,
-              'discount_amount': 15000,
-              'min_order_amount': 40000,
-            },
-          ];
-
           return SizedBox(
             height: MediaQuery.of(sheetCtx).size.height * 0.85,
             child: Column(
@@ -1042,109 +1009,164 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       const SizedBox(height: 8),
 
-                      Column(
-                        children: redeemVouchers.map((v) {
-                          final pointsRequired = v['points'] as int;
-                          final hasEnough = _user.rewardPoints >= pointsRequired;
-                          final code = v['code'] as String;
+                      FutureBuilder<List<PromoModel>>(
+                        future: _promoRepository.getPromos(category: 'Reward Point', activeOnly: true),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                            );
+                          }
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: hasEnough ? const Color(0xFFFEF3C7) : AppColors.background,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    LucideIcons.ticket,
-                                    color: hasEnough ? const Color(0xFFD97706) : AppColors.textMuted,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        v['title'] as String,
-                                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '${v['desc']} • Butuh $pointsRequired Poin',
-                                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    if (!hasEnough) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Poin Anda belum cukup (${_user.rewardPoints}/$pointsRequired Poin). Pesan laundry lagi untuk kumpulkan poin!'),
-                                          backgroundColor: AppColors.error,
-                                        ),
-                                      );
-                                      return;
-                                    }
+                          final rewardPromos = (snapshot.data ?? [])
+                              .where((p) => (p.pointsRequired > 0 || p.pointsSpent > 0) && p.isValidPeriod)
+                              .toList();
 
-                                    try {
-                                      await _userRepository.redeemPoints(
-                                        points: pointsRequired,
-                                        code: code,
-                                        title: v['title'] as String,
-                                        subtitle: v['desc'] as String,
-                                        discountAmount: v['discount_amount'] as int,
-                                        minOrderAmount: v['min_order_amount'] as int,
-                                      );
-                                      await _loadProfile();
-                                      setSheetState(() {});
-                                      Clipboard.setData(ClipboardData(text: code));
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Selamat! Berhasil menukarkan $pointsRequired poin. Voucher "$code" tersimpan di akun Anda & kode telah disalin!'),
-                                            backgroundColor: const Color(0xFF059669),
-                                            duration: const Duration(seconds: 4),
+                          if (rewardPromos.isEmpty) {
+                            return Container(
+                              padding: const EdgeInsets.all(20),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: const Column(
+                                children: [
+                                  Icon(LucideIcons.ticket, size: 28, color: AppColors.textMuted),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Belum Ada Voucher Poin Reward',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Nantikan voucher reward menarik dari Almas Laundry segera!',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return Column(
+                            children: rewardPromos.map((promo) {
+                              final pointsReq = promo.pointsRequired > 0 ? promo.pointsRequired : promo.pointsSpent;
+                              final hasEnough = _user.rewardPoints >= pointsReq;
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: hasEnough ? const Color(0xFFFEF3C7) : AppColors.background,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        promo.icon,
+                                        color: hasEnough ? const Color(0xFFD97706) : AppColors.textMuted,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            promo.title,
+                                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                                           ),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Gagal menukarkan poin: $e'), backgroundColor: AppColors.error),
-                                        );
-                                      }
-                                    }
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: hasEnough ? AppColors.primary : AppColors.border,
-                                    foregroundColor: hasEnough ? Colors.white : AppColors.textMuted,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  child: Text(
-                                    hasEnough ? 'Tukar' : '$pointsRequired Poin',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '${promo.discountLabel} • Min. ${promo.minOrderAmount > 0 ? CurrencyFormatter.formatRupiah(promo.minOrderAmount) : "Tanpa Min."}',
+                                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                          ),
+                                          if (promo.formattedPeriod.isNotEmpty)
+                                            Text(
+                                              'Berlaku: ${promo.formattedPeriod}',
+                                              style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        if (!hasEnough) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Poin Anda belum cukup (${_user.rewardPoints}/$pointsReq Poin). Pesan laundry lagi untuk kumpulkan poin!'),
+                                              backgroundColor: AppColors.error,
+                                            ),
+                                          );
+                                          return;
+                                        }
+
+                                        try {
+                                          await _userRepository.redeemPoints(
+                                            points: pointsReq,
+                                            code: promo.code,
+                                            title: promo.title,
+                                            subtitle: promo.subtitle,
+                                            category: promo.category,
+                                            benefitType: promo.benefitType,
+                                            discountType: promo.discountType,
+                                            discountAmount: promo.discountAmount,
+                                            maxDiscount: promo.maxDiscount,
+                                            minOrderAmount: promo.minOrderAmount,
+                                            promosId: promo.id,
+                                            startDate: promo.startDate,
+                                            endDate: promo.endDate,
+                                          );
+                                          await _loadProfile();
+                                          setSheetState(() {});
+                                          Clipboard.setData(ClipboardData(text: promo.code));
+                                          if (mounted && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Selamat! Berhasil menukarkan $pointsReq poin. Voucher "${promo.code}" tersimpan di akun Anda & kode telah disalin!'),
+                                                backgroundColor: const Color(0xFF059669),
+                                                duration: const Duration(seconds: 4),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Gagal menukarkan poin: $e'), backgroundColor: AppColors.error),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: hasEnough ? AppColors.primary : AppColors.border,
+                                        foregroundColor: hasEnough ? Colors.white : AppColors.textMuted,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      child: Text(
+                                        hasEnough ? 'Tukar ($pointsReq)' : '$pointsReq Poin',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              );
+                            }).toList(),
                           );
-                        }).toList(),
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -1723,20 +1745,34 @@ class _ProfilePageState extends State<ProfilePage> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: isUsed ? const Color(0xFFF3F4F6) : const Color(0xFFEFF6FF),
+                                            color: isUsed
+                                                ? const Color(0xFFF3F4F6)
+                                                : promo.isExpired
+                                                    ? const Color(0xFFFEF2F2)
+                                                    : const Color(0xFFEFF6FF),
                                             borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: isUsed ? const Color(0xFFE5E7EB) : const Color(0xFFBFDBFE)),
+                                            border: Border.all(
+                                              color: isUsed
+                                                  ? const Color(0xFFE5E7EB)
+                                                  : promo.isExpired
+                                                      ? const Color(0xFFFECACA)
+                                                      : const Color(0xFFBFDBFE),
+                                            ),
                                           ),
                                           child: Text(
                                             isUsed
                                                 ? 'Sudah Digunakan'
-                                                : (promo.discountAmount > 0
-                                                    ? 'Hemat ${CurrencyFormatter.formatRupiah(promo.discountAmount)}'
-                                                    : 'Spesial'),
+                                                : promo.isExpired
+                                                    ? 'Kedaluwarsa'
+                                                    : promo.discountLabel,
                                             style: TextStyle(
                                               fontSize: 10.5,
                                               fontWeight: FontWeight.bold,
-                                              color: isUsed ? AppColors.textMuted : AppColors.primary,
+                                              color: isUsed
+                                                  ? AppColors.textMuted
+                                                  : promo.isExpired
+                                                      ? AppColors.error
+                                                      : AppColors.primary,
                                             ),
                                           ),
                                         ),

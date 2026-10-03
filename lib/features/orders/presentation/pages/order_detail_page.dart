@@ -1255,7 +1255,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 child: OutlinedButton.icon(
                   onPressed: _showAppStoreRatingDialog,
                   icon: const Icon(LucideIcons.star, size: 14, color: Color(0xFFD97706)),
-                  label: const Text('Beri Rating di Play Store / App Store ⭐', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  label: const Text('Beri Rating di Play Store / App Store', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFFB45309),
                     side: const BorderSide(color: Color(0xFFFCD34D)),
@@ -1310,7 +1310,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Pesanan Telah Selesai! 🎉',
+                      'Pesanan Telah Selesai!',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
                     ),
                     Text(
@@ -1699,7 +1699,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       LauncherHelper.openPlayStore();
                     },
                     icon: const Icon(LucideIcons.play, size: 16),
-                    label: const Text('Beri Rating di Google Play ⭐⭐⭐⭐⭐', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: const Text('Beri Rating di Google Play', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0284C7),
                       foregroundColor: Colors.white,

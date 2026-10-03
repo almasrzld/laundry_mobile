@@ -15,6 +15,7 @@ import 'package:laundry_app/data/models/service_model.dart';
 import 'package:laundry_app/data/models/user_model.dart';
 import 'package:laundry_app/data/repositories/order_repository.dart';
 import 'package:laundry_app/data/repositories/payment_repository.dart';
+import 'package:laundry_app/data/repositories/promo_repository.dart';
 import 'package:laundry_app/data/repositories/service_repository.dart';
 import 'package:laundry_app/data/repositories/user_repository.dart';
 import 'package:laundry_app/features/orders/presentation/widgets/payment_proof_upload_sheet.dart';
@@ -65,6 +66,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
   final ServiceRepository _serviceRepo = ServiceRepository();
   final OrderRepository _orderRepo = OrderRepository();
   final UserRepository _userRepo = UserRepository();
+  final PromoRepository _promoRepo = PromoRepository();
 
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
@@ -127,6 +129,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
       final futures = await Future.wait([
         _serviceRepo.getPerfumes(),
         _serviceRepo.getPaymentMethods(),
+        _promoRepo.getPromos(category: 'Event', activeOnly: true),
         _userRepo.getUserVouchers(activeOnly: true),
         _userRepo.getProfile(),
       ]);
@@ -135,8 +138,20 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
         setState(() {
           _perfumes = futures[0] as List<PerfumeModel>;
           _paymentMethods = futures[1] as List<PaymentMethodModel>;
-          _availablePromos = futures[2] as List<PromoModel>;
-          final refreshedUser = futures[3] as UserModel?;
+          
+          final eventPromos = futures[2] as List<PromoModel>;
+          final userVouchers = futures[3] as List<PromoModel>;
+          
+          // Gabungkan event promos + user vouchers, hilangkan duplikat kode, saring yang masih valid
+          final Map<String, PromoModel> combinedMap = {};
+          for (final p in [...eventPromos, ...userVouchers]) {
+            if (p.isValidPeriod && !p.isUsed) {
+              combinedMap[p.code.toUpperCase()] = p;
+            }
+          }
+          _availablePromos = combinedMap.values.toList();
+
+          final refreshedUser = futures[4] as UserModel?;
           if (refreshedUser != null) _currentUser = refreshedUser;
 
           if (_perfumes.isNotEmpty) _selectedPerfume = _perfumes.first;
@@ -215,27 +230,41 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
     if (_appliedPromo == null) return 0;
     final promo = _appliedPromo!;
 
-    // Cek syarat minimal order
+    // Cek tenggat waktu dan syarat minimal order
+    if (promo.isExpired) return 0;
     if (promo.minOrderAmount > 0 && _subtotal < promo.minOrderAmount) {
       return 0;
     }
 
-    final codeLower = promo.code.toLowerCase();
-    final titleLower = promo.title.toLowerCase();
-
-    // 1. Voucher Bebas Ongkir
-    if (codeLower.contains('ongkir') || titleLower.contains('antar-jemput') || titleLower.contains('ongkir')) {
+    // 1. Voucher Bebas Ongkir (Gratis Total Biaya Pengiriman)
+    if (promo.isFreeDelivery) {
       return _ongkirFee;
     }
 
-    // 2. Voucher Persentase (contoh: 25%)
-    if (titleLower.contains('25%') || codeLower.contains('25')) {
-      return (_subtotal * 0.25).toInt();
+    // 2. Voucher Potongan Ongkir
+    if (promo.isDeliveryDiscount) {
+      if (promo.isPercentage) {
+        final calc = (_ongkirFee * (promo.discountAmount / 100)).toInt();
+        if (promo.maxDiscount != null && promo.maxDiscount! > 0) {
+          return min(calc, min(promo.maxDiscount!, _ongkirFee));
+        }
+        return min(calc, _ongkirFee);
+      } else {
+        return min(promo.discountAmount, _ongkirFee);
+      }
     }
 
-    // 3. Voucher Nominal Tetap
-    if (promo.discountAmount > 0) {
-      return min(promo.discountAmount, _subtotal.toInt());
+    // 3. Voucher Potongan Harga Layanan (Cucian)
+    if (promo.isServiceDiscount || promo.benefitType.isEmpty) {
+      if (promo.isPercentage) {
+        final calc = (_subtotal * (promo.discountAmount / 100)).toInt();
+        if (promo.maxDiscount != null && promo.maxDiscount! > 0) {
+          return min(calc, min(promo.maxDiscount!, _subtotal.toInt()));
+        }
+        return min(calc, _subtotal.toInt());
+      } else {
+        return min(promo.discountAmount, _subtotal.toInt());
+      }
     }
 
     return 0;
@@ -328,19 +357,32 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: () {
+                          onPressed: () async {
                             final code = _promoInputController.text.trim().toUpperCase();
                             if (code.isEmpty) return;
 
-                            final matchingPromos = _availablePromos.where((p) => p.code.toUpperCase() == code).toList();
-                            if (matchingPromos.isEmpty) {
+                            final PromoModel matched;
+                            final localMatching = _availablePromos.where((p) => p.code.toUpperCase() == code).toList();
+                            if (localMatching.isNotEmpty) {
+                              matched = localMatching.first;
+                            } else {
+                              try {
+                                matched = await _userRepo.verifyVoucher(code);
+                              } catch (err) {
+                                setSheetState(() {
+                                  localError = 'Kode voucher "$code" tidak valid atau belum Anda tukarkan.';
+                                });
+                                return;
+                              }
+                            }
+
+                            if (matched.isExpired) {
                               setSheetState(() {
-                                localError = 'Kode voucher "$code" tidak valid atau belum Anda tukarkan.';
+                                localError = 'Voucher "$code" telah kedaluwarsa pada ${matched.formattedPeriod}.';
                               });
                               return;
                             }
 
-                            final matched = matchingPromos.first;
                             if (matched.minOrderAmount > 0 && _subtotal < matched.minOrderAmount) {
                               setSheetState(() {
                                 localError = 'Minimal belanja ${CurrencyFormatter.formatRupiah(matched.minOrderAmount)} untuk menggunakan voucher ini.';
@@ -348,9 +390,9 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                               return;
                             }
 
-                            setState(() => _appliedPromo = matched);
-                            Navigator.pop(sheetCtx);
-                            if (mounted) {
+                            if (mounted && context.mounted) {
+                              setState(() => _appliedPromo = matched);
+                              Navigator.pop(sheetCtx);
                               AppToast.showSuccess(context, 'Voucher "${matched.code}" berhasil dipasang!');
                             }
                           },
@@ -394,7 +436,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'Tukarkan Poin Rewards di profil Anda untuk mendapatkan voucher diskon pesanan cucian.',
+                              'Tukarkan Poin Rewards di profil Anda atau gunakan voucher promo event yang tersedia.',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                             ),
@@ -452,30 +494,73 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          promo.title,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: isEligible ? AppColors.textPrimary : AppColors.textMuted,
-                                          ),
-                                        ),
-                                        Text(
-                                          promo.subtitle,
-                                          style: TextStyle(fontSize: 11, color: isEligible ? AppColors.textSecondary : AppColors.textMuted),
-                                        ),
-                                        if (promo.minOrderAmount > 0)
-                                          Text(
-                                            'Min. order ${CurrencyFormatter.formatRupiah(promo.minOrderAmount)}',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                              color: isEligible ? AppColors.primary : Colors.amber.shade800,
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                promo.title,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isEligible ? AppColors.textPrimary : AppColors.textMuted,
+                                                ),
+                                              ),
                                             ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: promo.isFreeDelivery
+                                                    ? const Color(0xFFECFDF5)
+                                                    : promo.isRewardPoint
+                                                        ? const Color(0xFFFEF3C7)
+                                                        : const Color(0xFFEFF6FF),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                promo.discountLabel,
+                                                style: TextStyle(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: promo.isFreeDelivery
+                                                      ? const Color(0xFF059669)
+                                                      : promo.isRewardPoint
+                                                          ? const Color(0xFFD97706)
+                                                          : AppColors.primary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (promo.subtitle.isNotEmpty)
+                                          Text(
+                                            promo.subtitle,
+                                            style: TextStyle(fontSize: 11, color: isEligible ? AppColors.textSecondary : AppColors.textMuted),
                                           ),
+                                        Row(
+                                          children: [
+                                            if (promo.minOrderAmount > 0)
+                                              Text(
+                                                'Min. order ${CurrencyFormatter.formatRupiah(promo.minOrderAmount)}',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isEligible ? AppColors.primary : Colors.amber.shade800,
+                                                ),
+                                              ),
+                                            if (promo.formattedPeriod.isNotEmpty) ...[
+                                              if (promo.minOrderAmount > 0)
+                                                const Text(' • ', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                                              Text(
+                                                'Berlaku s/d ${promo.endDate != null ? promo.formattedPeriod.split(' - ').last : ''}',
+                                                style: const TextStyle(fontSize: 9.5, color: AppColors.textSecondary),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ],
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   if (isCurrentlyApplied)
                                     const Icon(LucideIcons.checkCircle2, color: AppColors.primary, size: 18)
                                   else if (isEligible)

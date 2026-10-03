@@ -31,9 +31,15 @@ abstract class IUserRepository {
     String? title,
     String? subtitle,
     String? description,
+    String? category,
+    String? benefitType,
+    String? discountType,
     int? discountAmount,
+    int? maxDiscount,
     int? minOrderAmount,
     String? promosId,
+    String? startDate,
+    String? endDate,
   });
   Future<List<PromoModel>> getUserVouchers({bool activeOnly = false});
   Future<PromoModel> verifyVoucher(String code);
@@ -179,9 +185,15 @@ class UserRepository implements IUserRepository {
     String? title,
     String? subtitle,
     String? description,
+    String? category,
+    String? benefitType,
+    String? discountType,
     int? discountAmount,
+    int? maxDiscount,
     int? minOrderAmount,
     String? promosId,
+    String? startDate,
+    String? endDate,
   }) async {
     final body = <String, dynamic>{'points': points};
     if (code != null) {
@@ -191,9 +203,15 @@ class UserRepository implements IUserRepository {
     if (title != null) body['title'] = title;
     if (subtitle != null) body['subtitle'] = subtitle;
     if (description != null) body['description'] = description;
+    if (category != null) body['category'] = category;
+    if (benefitType != null) body['benefit_type'] = benefitType;
+    if (discountType != null) body['discount_type'] = discountType;
     if (discountAmount != null) body['discount_amount'] = discountAmount;
+    if (maxDiscount != null) body['max_discount'] = maxDiscount;
     if (minOrderAmount != null) body['min_order_amount'] = minOrderAmount;
     if (promosId != null) body['promos_id'] = promosId;
+    if (startDate != null) body['start_date'] = startDate;
+    if (endDate != null) body['end_date'] = endDate;
 
     final response = await _apiClient.post(
       ApiEndpoints.userPointsRedeem,
