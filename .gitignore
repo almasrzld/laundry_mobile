@@ -59,3 +59,8 @@ key.properties
 app.*.symbols
 app.*.map.json
 .widget_preview/
+
+# AI Agent Instructions & Rules
+AGENTS.md
+.agents/
+*.agent.md

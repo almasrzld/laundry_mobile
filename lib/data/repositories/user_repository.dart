@@ -44,6 +44,13 @@ abstract class IUserRepository {
   Future<List<PromoModel>> getUserVouchers({bool activeOnly = false});
   Future<PromoModel> verifyVoucher(String code);
   Future<List<WalletTransactionModel>> getWalletTransactions({int limit = 50});
+  Future<Map<String, dynamic>> topupWallet({
+    required int amount,
+    String? paymentMethod,
+    String? notes,
+    List<int>? proofBytes,
+    String? proofFilename,
+  });
 }
 
 class UserRepository implements IUserRepository {
@@ -278,6 +285,48 @@ class UserRepository implements IUserRepository {
     } catch (_) {
       return [];
     }
+  }
+
+  @override
+  Future<Map<String, dynamic>> topupWallet({
+    required int amount,
+    String? paymentMethod,
+    String? notes,
+    List<int>? proofBytes,
+    String? proofFilename,
+  }) async {
+    if (proofBytes != null && proofBytes.isNotEmpty) {
+      final response = await _apiClient.uploadMultipart(
+        ApiEndpoints.userWalletTopup,
+        fieldName: 'proof',
+        fileBytes: proofBytes,
+        filename: proofFilename ?? 'bukti_topup.jpg',
+        fields: {
+          'amount': amount.toString(),
+          if (paymentMethod != null && paymentMethod.isNotEmpty) 'payment_method': paymentMethod,
+          if (notes != null && notes.isNotEmpty) 'notes': notes,
+        },
+      );
+
+      if (response is Map<String, dynamic>) {
+        return response;
+      }
+      return {'success': true};
+    }
+
+    final response = await _apiClient.post(
+      ApiEndpoints.userWalletTopup,
+      body: {
+        'amount': amount,
+        if (paymentMethod != null && paymentMethod.isNotEmpty) 'payment_method': paymentMethod,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      },
+    );
+
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    return {'success': true};
   }
 }
 

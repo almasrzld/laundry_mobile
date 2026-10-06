@@ -57,7 +57,18 @@ class PaymentMethodModel {
       isActive: json['is_active'] != false && json['is_active'] != 0,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PaymentMethodModel &&
+          runtimeType == other.runtimeType &&
+          code.toLowerCase() == other.code.toLowerCase();
+
+  @override
+  int get hashCode => code.toLowerCase().hashCode;
 }
+
 
 class MasterOrderStatusModel {
   final String id;

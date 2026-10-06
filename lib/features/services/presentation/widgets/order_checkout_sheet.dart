@@ -19,6 +19,7 @@ import 'package:laundry_app/data/repositories/promo_repository.dart';
 import 'package:laundry_app/data/repositories/service_repository.dart';
 import 'package:laundry_app/data/repositories/user_repository.dart';
 import 'package:laundry_app/features/orders/presentation/widgets/payment_proof_upload_sheet.dart';
+import 'package:laundry_app/features/profile/presentation/widgets/top_up_sheet.dart';
 import 'package:laundry_app/features/services/presentation/widgets/xendit_qris_sheet.dart';
 
 class OrderCheckoutSheet extends StatefulWidget {
@@ -126,22 +127,28 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
 
   Future<void> _initData() async {
     try {
-      final futures = await Future.wait([
-        _serviceRepo.getPerfumes(),
-        _serviceRepo.getPaymentMethods(),
-        _promoRepo.getPromos(category: 'Event', activeOnly: true),
-        _userRepo.getUserVouchers(activeOnly: true),
-        _userRepo.getProfile(),
+      final perfumesFuture = _serviceRepo.getPerfumes().catchError((_) => <PerfumeModel>[]);
+      final paymentsFuture = _serviceRepo.getPaymentMethods().catchError((_) => <PaymentMethodModel>[]);
+      final eventPromosFuture = _promoRepo.getPromos(category: 'Event', activeOnly: true).catchError((_) => <PromoModel>[]);
+      final userVouchersFuture = _userRepo.getUserVouchers(activeOnly: true).catchError((_) => <PromoModel>[]);
+      final profileFuture = _userRepo.getProfile().catchError((_) => widget.user);
+
+      final results = await Future.wait([
+        perfumesFuture,
+        paymentsFuture,
+        eventPromosFuture,
+        userVouchersFuture,
+        profileFuture,
       ]);
 
       if (mounted) {
         setState(() {
-          _perfumes = futures[0] as List<PerfumeModel>;
-          _paymentMethods = futures[1] as List<PaymentMethodModel>;
-          
-          final eventPromos = futures[2] as List<PromoModel>;
-          final userVouchers = futures[3] as List<PromoModel>;
-          
+          _perfumes = results[0] as List<PerfumeModel>;
+          _paymentMethods = results[1] as List<PaymentMethodModel>;
+
+          final eventPromos = results[2] as List<PromoModel>;
+          final userVouchers = results[3] as List<PromoModel>;
+
           // Gabungkan event promos + user vouchers, hilangkan duplikat kode, saring yang masih valid
           final Map<String, PromoModel> combinedMap = {};
           for (final p in [...eventPromos, ...userVouchers]) {
@@ -151,13 +158,15 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
           }
           _availablePromos = combinedMap.values.toList();
 
-          final refreshedUser = futures[4] as UserModel?;
-          if (refreshedUser != null) _currentUser = refreshedUser;
+          final refreshedUser = results[4] as UserModel?;
+          if (refreshedUser != null && refreshedUser != UserModel.empty) {
+            _currentUser = refreshedUser;
+          }
 
           if (_perfumes.isNotEmpty) _selectedPerfume = _perfumes.first;
 
           final activePayments = _paymentMethods.where((p) => p.isActive).toList();
-          if (activePayments.isNotEmpty) {
+          if (activePayments.isNotEmpty && _selectedPayment == null) {
             _selectedPayment = activePayments.first;
           }
 
@@ -171,6 +180,29 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
         setState(() => _isLoadingInit = false);
       }
     }
+  }
+
+  Future<void> _refreshUserData() async {
+    try {
+      final updated = await _userRepo.getProfile();
+      if (updated != UserModel.empty && mounted) {
+        setState(() {
+          _currentUser = updated;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _openTopUpSheet({int? prefillAmount, String? reason}) {
+    TopUpSheet.show(
+      context,
+      user: _currentUser,
+      prefillAmount: prefillAmount,
+      prefillReason: reason,
+      onTopUpSuccess: () {
+        _refreshUserData();
+      },
+    );
   }
 
   Future<void> _tryCalculateInitialOngkir() async {
@@ -618,8 +650,16 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
 
     if (isLaundryPay && !_isFreeViaPromosAndPoints) {
       if (_currentUser.laundryPayBalance < _grandTotal) {
+        final shortage = (_grandTotal - _currentUser.laundryPayBalance).toInt();
         if (mounted) {
-          AppToast.showError(context, 'Saldo LaundryPay Anda tidak mencukupi (Saldo: ${CurrencyFormatter.formatRupiah(_currentUser.laundryPayBalance)})');
+          AppToast.showError(
+            context,
+            'Saldo LaundryPay Anda tidak mencukupi! Kurang ${CurrencyFormatter.formatRupiah(shortage)} dari total tagihan ${CurrencyFormatter.formatRupiah(_grandTotal)}. Silakan isi saldo terlebih dahulu.',
+          );
+          _openTopUpSheet(
+            prefillAmount: shortage,
+            reason: 'Kekurangan pembayaran pesanan ${widget.service.name} (${CurrencyFormatter.formatRupiah(shortage)})',
+          );
         }
         return;
       }
@@ -656,6 +696,8 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
         discount: _voucherDiscount,
         voucherCode: _appliedPromo?.code,
         pointsRedeemed: _useRewardPoints ? _effectivePointDiscount : 0,
+        paymentMethod: _isFreeViaPromosAndPoints ? 'Voucher & Poin' : _selectedPayment?.name,
+        paymentMethodCode: _isFreeViaPromosAndPoints ? 'FREE_PROMO' : _selectedPayment?.code,
         pickupAddress: finalAddr,
         deliveryAddress: finalAddr,
         notes: fullNote,
@@ -739,7 +781,16 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
           );
         }
       }
-      // 4. Jika LaundryPay / Tunai
+      // 4. Jika LaundryPay
+      else if (isLaundryPay) {
+        if (targetContext != null && targetContext.mounted) {
+          AppToast.showSuccess(
+            targetContext,
+            'Pesanan "${widget.service.name}" berhasil dibayar menggunakan Saldo LaundryPay! Kurir akan segera menjemput.',
+          );
+        }
+      }
+      // 5. Jika Tunai
       else {
         if (targetContext != null && targetContext.mounted) {
           AppToast.showSuccess(
@@ -1491,6 +1542,114 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                     ),
                   );
                 }),
+
+                // LaundryPay Balance & Shortage Box
+                if (!_isFreeViaPromosAndPoints && _selectedPayment != null &&
+                    (_selectedPayment!.code.toLowerCase().contains('laundrypay') ||
+                     _selectedPayment!.name.toLowerCase().contains('saldo'))) ...[
+                  Builder(
+                    builder: (ctx) {
+                      final currentBal = _currentUser.laundryPayBalance;
+                      final requiredTotal = _grandTotal.toInt();
+                      final isShort = currentBal < requiredTotal;
+                      final shortage = requiredTotal - currentBal;
+
+                      if (isShort) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFDA4AF)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(LucideIcons.alertTriangle, color: Color(0xFFE11D48), size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Saldo LaundryPay Kurang ${CurrencyFormatter.formatRupiah(shortage)}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFBE123C),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Saldo Anda saat ini ${CurrencyFormatter.formatRupiah(currentBal)}, kurang ${CurrencyFormatter.formatRupiah(shortage)} dari total tagihan ${CurrencyFormatter.formatRupiah(requiredTotal)}. Silakan lakukan top-up saldo terlebih dahulu.',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF9F1239), height: 1.35),
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 36,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    _openTopUpSheet(
+                                      prefillAmount: shortage,
+                                      reason: 'Kekurangan pembayaran pesanan ${widget.service.name} sebesar ${CurrencyFormatter.formatRupiah(shortage)}',
+                                    );
+                                  },
+                                  icon: const Icon(LucideIcons.plusCircle, size: 14),
+                                  label: Text(
+                                    'Top-Up Saldo Sekarang (+${CurrencyFormatter.formatRupiah(shortage)})',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFE11D48),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      } else {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECFDF5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF6EE7B7)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.checkCircle2, color: Color(0xFF059669), size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Saldo LaundryPay Mencukupi',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Saldo aktif: ${CurrencyFormatter.formatRupiah(currentBal)} • Sisa setelah bayar: ${CurrencyFormatter.formatRupiah(currentBal - requiredTotal)}',
+                                      style: const TextStyle(fontSize: 10.5, color: Color(0xFF047857)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
               ],
               const SizedBox(height: 10),
 

@@ -4,13 +4,22 @@ import '../models/courier_summary_model.dart';
 import '../models/master_model.dart';
 import '../models/order_model.dart';
 import '../models/wallet_transaction_model.dart';
+import '../models/withdrawal_request_model.dart';
 
 abstract class ICourierRepository {
   Future<CourierSummaryModel?> getCourierSummary();
   Future<List<OrderModel>> getCourierTasks({String? status});
   Future<List<MasterOrderStatusModel>> getMasterStatuses();
+  Future<List<PaymentMethodModel>> getPaymentMethods();
   Future<bool> updateTaskStatus(String orderId, String newStatus);
   Future<List<WalletTransactionModel>> getCourierTransactions({String? category});
+  Future<List<WithdrawalRequestModel>> getCourierWithdrawals();
+  Future<Map<String, dynamic>> requestWithdrawal({
+    required int amount,
+    required String bankName,
+    required String accountNumber,
+    required String accountName,
+  });
 }
 
 class CourierRepository implements ICourierRepository {
@@ -79,6 +88,26 @@ class CourierRepository implements ICourierRepository {
   }
 
   @override
+  Future<List<PaymentMethodModel>> getPaymentMethods() async {
+    try {
+      final response = await _apiClient.get(ApiEndpoints.paymentMethods);
+      final data = response is Map && response['data'] != null
+          ? response['data']
+          : response;
+
+      if (data is List) {
+        return data
+            .map((item) => PaymentMethodModel.fromJson(item as Map<String, dynamic>))
+            .where((pm) => pm.isActive)
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
   Future<bool> updateTaskStatus(String orderId, String newStatus) async {
     try {
       await _apiClient.patch(
@@ -112,4 +141,53 @@ class CourierRepository implements ICourierRepository {
       return [];
     }
   }
+
+  @override
+  Future<List<WithdrawalRequestModel>> getCourierWithdrawals() async {
+    try {
+      final response = await _apiClient.get(ApiEndpoints.courierWithdrawals);
+      final data = response is Map && response['data'] != null
+          ? response['data']
+          : response;
+
+      if (data is List) {
+        return data
+            .map((item) => WithdrawalRequestModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> requestWithdrawal({
+    required int amount,
+    required String bankName,
+    required String accountNumber,
+    required String accountName,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        ApiEndpoints.courierWithdrawals,
+        body: {
+          'amount': amount,
+          'bank_name': bankName,
+          'account_number': accountNumber,
+          'account_name': accountName,
+        },
+      );
+      return {
+        'success': true,
+        'data': response,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
 }
+

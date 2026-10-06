@@ -9,6 +9,7 @@ import '../../../../data/models/order_model.dart';
 import '../../../../data/repositories/courier_repository.dart';
 import '../../../orders/presentation/pages/order_detail_page.dart';
 import '../widgets/courier_transaction_history_sheet.dart';
+import '../widgets/courier_withdrawal_sheet.dart';
 
 class CourierTasksPage extends StatefulWidget {
   const CourierTasksPage({super.key});
@@ -27,6 +28,15 @@ class _CourierTasksPageState extends State<CourierTasksPage> with SingleTickerPr
       courierRepository: _courierRepository,
       currentBalance: _summary?.laundryPayBalance ?? 0,
       totalTips: _summary?.totalTips ?? 0,
+    );
+  }
+
+  void _showWithdrawalSheet() {
+    CourierWithdrawalSheet.show(
+      context,
+      courierRepository: _courierRepository,
+      currentBalance: _summary?.laundryPayBalance ?? 0,
+      onSuccess: _loadData,
     );
   }
 
@@ -536,35 +546,79 @@ class _CourierTasksPageState extends State<CourierTasksPage> with SingleTickerPr
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: _showTransactionHistorySheet,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(20),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white24, width: 0.8),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(LucideIcons.receiptText, color: Colors.white, size: 14),
-                  SizedBox(width: 6),
-                  Text(
-                    'Riwayat Transaksi & Mutasi Saldo',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: _showWithdrawalSheet,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8.5),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0284C7), Color(0xFF0369A1)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0284C7).withAlpha(40),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(LucideIcons.arrowUpRight, color: Colors.white, size: 14),
+                        SizedBox(width: 5),
+                        Text(
+                          'Tarik Saldo (WD)',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(width: 4),
-                  Icon(LucideIcons.chevronRight, color: Colors.white70, size: 14),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: _showTransactionHistorySheet,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8.5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white24, width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(LucideIcons.receiptText, color: Colors.white, size: 14),
+                        SizedBox(width: 5),
+                        Text(
+                          'Riwayat Mutasi',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -7,6 +8,18 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/main_navigation/presentation/pages/main_navigation_page.dart';
 import 'features/splash/presentation/pages/splash_page.dart';
+
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +92,7 @@ class _LaundryAppState extends State<LaundryApp> with WidgetsBindingObserver {
       onPointerPanZoomUpdate: (_) => SessionManager.recordActivity(),
       onPointerSignal: (_) => SessionManager.recordActivity(),
       child: MaterialApp(
+        scrollBehavior: const AppScrollBehavior(),
         navigatorKey: SessionManager.navigatorKey,
         title: AppStrings.appName,
         debugShowCheckedModeBanner: false,

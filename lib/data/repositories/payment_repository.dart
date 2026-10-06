@@ -5,6 +5,7 @@ import '../models/payment_model.dart';
 abstract class IPaymentRepository {
   Future<XenditPaymentResultModel> createXenditPayment(String orderId, {String? paymentMethod, String? phone});
   Future<XenditQrisPaymentModel> createXenditQrisPayment(String orderId);
+  Future<XenditQrisPaymentModel> createXenditTopupQris(int amount);
   Future<PaymentProofResultModel> uploadPaymentProof(String orderId, List<int> fileBytes, String filename);
   Future<bool> simulatePayment(String orderId);
   Future<String> getPaymentStatus(String orderId);
@@ -37,6 +38,20 @@ class PaymentRepository implements IPaymentRepository {
   @override
   Future<XenditQrisPaymentModel> createXenditQrisPayment(String orderId) async {
     return createXenditPayment(orderId, paymentMethod: 'QRIS');
+  }
+
+  @override
+  Future<XenditQrisPaymentModel> createXenditTopupQris(int amount) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.createXenditTopupQris,
+      body: {'amount': amount},
+    );
+
+    if (response is Map) {
+      final data = response['data'] ?? response;
+      return XenditPaymentResultModel.fromJson(data as Map<String, dynamic>);
+    }
+    throw Exception('Gagal membuat pembayaran QRIS top-up');
   }
 
   @override

@@ -125,12 +125,8 @@ class NotificationRealtimeService {
         return;
       }
 
-      final countFuture = _repository.getUnreadCount();
-      final listFuture = _repository.getNotifications();
-
-      final results = await Future.wait([countFuture, listFuture]);
-      final newCount = results[0] as int;
-      final newList = results[1] as List<NotificationModel>;
+      final newCount = await _repository.getUnreadCount();
+      final newList = await _repository.getNotifications();
 
       // Check for new notifications to trigger in-app alert
       if (_knownNotificationIds.isNotEmpty) {

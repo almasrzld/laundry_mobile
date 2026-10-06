@@ -57,6 +57,9 @@ class _HomePageState extends State<HomePage> {
   List<PromoModel> _promos = [];
   bool _isLoading = true;
   StreamSubscription? _realtimeRefreshSubscription;
+  int _currentBannerIndex = 0;
+  late final PageController _bannerPageController = PageController(viewportFraction: 0.92);
+  Timer? _bannerAutoScrollTimer;
 
   @override
   void initState() {
@@ -81,6 +84,21 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  void _startBannerAutoScroll() {
+    _bannerAutoScrollTimer?.cancel();
+    if (_promos.length > 1) {
+      _bannerAutoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+        if (!mounted || !_bannerPageController.hasClients) return;
+        final nextIndex = (_currentBannerIndex + 1) % _promos.length;
+        _bannerPageController.animateToPage(
+          nextIndex,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeInOutCubic,
+        );
+      });
+    }
+  }
+
   Future<void> _initSessionUser() async {
     try {
       final cached = await SessionService.getUser();
@@ -94,6 +112,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _bannerAutoScrollTimer?.cancel();
+    _bannerPageController.dispose();
     _realtimeRefreshSubscription?.cancel();
     super.dispose();
   }
@@ -138,10 +158,11 @@ class _HomePageState extends State<HomePage> {
           _activeOrder = fetchedActiveOrders.isNotEmpty ? fetchedActiveOrders.first : null;
         }
         if (fetchedServices != null && fetchedServices.isNotEmpty) {
-          _services = fetchedServices.take(6).toList();
+          _services = fetchedServices;
         }
         if (fetchedPromos != null && fetchedPromos.isNotEmpty) {
           _promos = fetchedPromos.where((p) => p.isValidPeriod).toList();
+          _startBannerAutoScroll();
         }
         _isLoading = false;
       });
@@ -284,7 +305,7 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         Flexible(
                           child: Text(
-                            'Halo, $greetingName! 👋',
+                            'Halo, $greetingName!',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -869,6 +890,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildPromoBanners(BuildContext context) {
+    if (_promos.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -877,27 +900,74 @@ class _HomePageState extends State<HomePage> {
           subtitle: 'Gunakan kode voucher sebelum memesan laundry',
         ),
         SizedBox(
-          height: 125,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+          height: 156,
+          child: PageView.builder(
+            controller: _bannerPageController,
             itemCount: _promos.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 12),
+            onPageChanged: (index) {
+              setState(() {
+                _currentBannerIndex = index;
+              });
+            },
             itemBuilder: (context, index) {
               final promo = _promos[index];
-              return _buildPromoCard(context, promo);
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: _buildPromoCard(context, promo, index),
+              );
             },
           ),
         ),
+        if (_promos.length > 1) ...[
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              _promos.length,
+              (index) => AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _currentBannerIndex == index ? 22 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: _currentBannerIndex == index
+                      ? AppColors.primary
+                      : AppColors.border,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildPromoCard(BuildContext context, PromoModel promo) {
+  Widget _buildPromoCard(BuildContext context, PromoModel promo, int index) {
+    final gradientPalettes = [
+      [const Color(0xFF0284C7), const Color(0xFF0369A1)], // Sky Blue to Deep Ocean
+      [const Color(0xFF0D9488), const Color(0xFF065F46)], // Teal to Emerald Forest
+      [const Color(0xFF6366F1), const Color(0xFF4338CA)], // Indigo to Deep Violet
+      [const Color(0xFFEA580C), const Color(0xFF9A3412)], // Vibrant Orange to Amber Rust
+    ];
+
+    final colors = gradientPalettes[index % gradientPalettes.length];
+
+    String badgeLabel = 'VOUCHER EVENT';
+    if (promo.isRewardPoint) {
+      badgeLabel = 'REWARD POIN (${promo.pointsRequired} Poin)';
+    } else if (promo.isFreeDelivery) {
+      badgeLabel = 'BEBAS ONGKIR';
+    } else if (promo.isPercentage) {
+      badgeLabel = 'DISKON ${promo.discountAmount}%';
+    } else if (promo.discountAmount > 0) {
+      badgeLabel = 'HEMAT ${CurrencyFormatter.formatRupiah(promo.discountAmount)}';
+    }
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         onTap: () {
           Clipboard.setData(ClipboardData(text: promo.code));
           ScaffoldMessenger.of(context).showSnackBar(
@@ -916,84 +986,210 @@ class _HomePageState extends State<HomePage> {
           );
         },
         child: Container(
-          width: 265,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
+            gradient: LinearGradient(
+              colors: colors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
               BoxShadow(
-                color: Color(0x260284C7),
-                blurRadius: 8,
-                offset: Offset(0, 3),
+                color: colors.first.withAlpha(55),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Stack(
+              children: [
+                // Decorative concentric circular bubbles in background
+                Positioned(
+                  right: -25,
+                  top: -25,
+                  child: Container(
+                    width: 140,
+                    height: 140,
                     decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(45),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(promo.icon, color: Colors.white, size: 16),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      promo.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      shape: BoxShape.circle,
+                      color: Colors.white.withAlpha(20),
                     ),
                   ),
-                ],
-              ),
-              Text(
-                promo.subtitle,
-                style: TextStyle(
-                  color: Colors.white.withAlpha(225),
-                  fontSize: 11,
-                  height: 1.2,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(35),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white.withAlpha(60), width: 0.8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Kode: ', style: TextStyle(color: Colors.white70, fontSize: 10)),
-                    Text(
-                      promo.code,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 0.5,
-                      ),
+                Positioned(
+                  right: 45,
+                  bottom: -30,
+                  child: Container(
+                    width: 90,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withAlpha(12),
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(LucideIcons.copy, color: Colors.white70, size: 10),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                Positioned(
+                  left: 110,
+                  top: -15,
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withAlpha(10),
+                    ),
+                  ),
+                ),
+
+                // Main Content
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  child: Row(
+                    children: [
+                      // Text & Action details
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Badge Tag
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(45),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: Colors.white.withAlpha(60),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(LucideIcons.sparkles, color: Colors.white, size: 10),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    badgeLabel,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 9.5,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Title & Subtitle
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  promo.title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                    height: 1.15,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (promo.subtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    promo.subtitle,
+                                    style: TextStyle(
+                                      color: Colors.white.withAlpha(225),
+                                      fontSize: 11,
+                                      height: 1.2,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+
+                            // Copy Code Button
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(7),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x1F000000),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Kode: ',
+                                    style: TextStyle(
+                                      color: colors.first,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    promo.code,
+                                    style: TextStyle(
+                                      color: colors.first,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(LucideIcons.copy, color: colors.first, size: 11),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+
+                      // Large Glassmorphic Icon Badge
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(35),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withAlpha(75),
+                            width: 1.5,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x20000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Icon(
+                            promo.icon,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1001,23 +1197,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildServiceGrid(BuildContext context) {
+    if (_services.isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _services.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 0.85,
-        ),
-        itemBuilder: (context, index) {
-          final s = _services[index];
-          return InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () {
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const itemWidth = 72.0;
+          const minSpacing = 14.0;
+          final totalNeededWidth =
+              _services.length * itemWidth + (_services.length - 1) * minSpacing;
+          final fitsOnScreen = constraints.maxWidth >= totalNeededWidth;
+
+          Widget buildItem(ServiceModel s) {
+            void handleTap() {
               OrderCheckoutSheet.show(
                 context,
                 service: s,
@@ -1026,52 +1219,98 @@ class _HomePageState extends State<HomePage> {
                   _loadDashboardData(isSilent: true);
                 },
               );
-            },
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
+            }
+
+            return MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: handleTap,
+                child: SizedBox(
+                  width: itemWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Material(
+                        color: Colors.transparent,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          hoverColor: AppColors.primaryContainer.withAlpha(80),
+                          splashColor: AppColors.primary.withAlpha(35),
+                          onTap: handleTap,
+                          child: Container(
+                            width: 58,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.primaryContainer,
+                                width: 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withAlpha(20),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Icon(
+                                s.icon,
+                                color: AppColors.primary,
+                                size: 26,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        s.name.split('(').first.trim(),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+            );
+          }
+
+          if (fitsOnScreen) {
+            // Tampilan layar lebar (Web / Tablet): Distribusi merata mengisi seluruh lebar
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _services.map((s) => buildItem(s)).toList(),
+            );
+          } else {
+            // Tampilan layar sempit (Mobile): Scroll horizontal halus
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(s.icon, color: AppColors.primary, size: 22),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    s.name.split('(').first.trim(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                      height: 1.2,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    CurrencyFormatter.formatRupiah(s.price),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
+                  for (int i = 0; i < _services.length; i++) ...[
+                    if (i > 0) const SizedBox(width: minSpacing),
+                    buildItem(_services[i]),
+                  ],
                 ],
               ),
-            ),
-          );
+            );
+          }
         },
       ),
     );

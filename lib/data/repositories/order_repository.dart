@@ -19,6 +19,8 @@ abstract class IOrderRepository {
     int discount = 0,
     String? voucherCode,
     int pointsRedeemed = 0,
+    String? paymentMethod,
+    String? paymentMethodCode,
     String notes = '',
   });
   Future<bool> submitRating(
@@ -86,6 +88,8 @@ class OrderRepository implements IOrderRepository {
     int discount = 0,
     String? voucherCode,
     int pointsRedeemed = 0,
+    String? paymentMethod,
+    String? paymentMethodCode,
     String notes = '',
   }) async {
     final body = {
@@ -98,6 +102,8 @@ class OrderRepository implements IOrderRepository {
       'discount': discount,
       if (voucherCode != null && voucherCode.trim().isNotEmpty) 'voucher_code': voucherCode.trim(),
       if (pointsRedeemed > 0) 'points_redeemed': pointsRedeemed,
+      if (paymentMethod != null && paymentMethod.trim().isNotEmpty) 'payment_method': paymentMethod.trim(),
+      if (paymentMethodCode != null && paymentMethodCode.trim().isNotEmpty) 'payment_method_code': paymentMethodCode.trim(),
       'pickup_address': pickupAddress,
       'delivery_address': deliveryAddress,
       'notes': notes,

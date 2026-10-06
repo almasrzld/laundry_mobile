@@ -1120,19 +1120,15 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   bool _checkIsCustomerOwner(OrderModel order) {
     if (_currentUser == null) return false;
 
-    // Kurir dan staf/admin operasional BUKAN pemilik pesanan
-    if (_currentUser!.isCourier || !_currentUser!.isCustomer) {
-      return false;
-    }
-
-    // Jika customer, pastikan ID atau Nama akun cocok dengan pesanan
+    // Jika ID pesanan atau nama pelanggan cocok dengan user yang sedang login, maka dia adalah pemilik pesanan
     if (order.userId != null && order.userId!.isNotEmpty) {
       return order.userId == _currentUser!.id;
     }
     if (order.customerName != null && order.customerName!.trim().isNotEmpty) {
       return order.customerName!.trim().toLowerCase() == _currentUser!.displayName.trim().toLowerCase();
     }
-    return true;
+
+    return !_currentUser!.isCourier;
   }
 
   Widget _buildRatingCard(OrderModel order) {
@@ -1378,12 +1374,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       builder: (sheetCtx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
-            final moodText = switch (selectedRating) {
-              5 => 'Sangat Puas & Luar Biasa! 🌟',
-              4 => 'Puas & Bersih Rapi 😊',
-              3 => 'Cukup Baik 🙂',
-              2 => 'Kurang Puas 🙁',
-              _ => 'Sangat Kecewa 😞',
+            final (moodText, moodIcon, moodColor) = switch (selectedRating) {
+              5 => ('Sangat Puas & Luar Biasa!', LucideIcons.sparkles, const Color(0xFFD97706)),
+              4 => ('Puas & Bersih Rapi', LucideIcons.smile, const Color(0xFF059669)),
+              3 => ('Cukup Baik', LucideIcons.meh, const Color(0xFF2563EB)),
+              2 => ('Kurang Puas', LucideIcons.frown, const Color(0xFFEA580C)),
+              _ => ('Sangat Kecewa', LucideIcons.thumbsDown, const Color(0xFFDC2626)),
             };
 
             return Container(
@@ -1472,13 +1468,27 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                               );
                             }),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            moodText,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFB45309),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: moodColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(moodIcon, size: 15, color: moodColor),
+                                const SizedBox(width: 6),
+                                Text(
+                                  moodText,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: moodColor,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],

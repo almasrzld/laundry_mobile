@@ -61,16 +61,19 @@ class ApiEndpoints {
   static const String courierSummary = '/couriers/summary';
   static const String courierTasks = '/couriers/tasks';
   static const String courierTransactions = '/couriers/transactions';
+  static const String courierWithdrawals = '/couriers/withdrawals';
   static String courierUpdateTaskStatus(String id) => '/couriers/tasks/$id/status';
 
-  // Wallet Transactions
+  // Wallet Transactions & Top-Up
   static const String userWalletTransactions = '/user/wallet/transactions';
+  static const String userWalletTopup = '/user/wallet/topup';
 
   // Payment Gateway & Manual Proof Endpoints
   static const String uploadPaymentProof = '/payments/proof';
   static String paymentStatus(String orderId) => '/payments/status/$orderId';
   static const String createXenditPayment = '/payments/xendit/create';
   static const String createXenditQris = '/payments/xendit/create-qr';
+  static const String createXenditTopupQris = '/payments/xendit/create-topup-qr';
   static const String simulateXenditPayment = '/payments/xendit/simulate';
   static String xenditPaymentStatus(String orderId) => '/payments/xendit/status/$orderId';
 }
