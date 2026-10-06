@@ -256,7 +256,11 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
   // =========================================================================
   // FINANCIAL CALCULATIONS (Subtotal, Ongkir, Voucher, Poin, Grand Total)
   // =========================================================================
-  double get _subtotal => _quantity * widget.service.price;
+  bool get _isKiloan =>
+      widget.service.unit.toLowerCase() == 'kg' ||
+      widget.service.category == ServiceCategoryType.kiloan;
+
+  double get _subtotal => _isKiloan ? 0.0 : _quantity * widget.service.price;
 
   int get _voucherDiscount {
     if (_appliedPromo == null) return 0;
@@ -313,6 +317,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
   }
 
   double get _grandTotal {
+    if (_isKiloan) return 0.0;
     final total = _subtotal + _ongkirFee - _voucherDiscount - _effectivePointDiscount;
     return max(0.0, total);
   }
@@ -648,7 +653,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
         (_selectedPayment!.code.toLowerCase().contains('laundrypay') ||
          _selectedPayment!.name.toLowerCase().contains('saldo'));
 
-    if (isLaundryPay && !_isFreeViaPromosAndPoints) {
+    if (!_isKiloan && isLaundryPay && !_isFreeViaPromosAndPoints) {
       if (_currentUser.laundryPayBalance < _grandTotal) {
         final shortage = (_grandTotal - _currentUser.laundryPayBalance).toInt();
         if (mounted) {
@@ -689,7 +694,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
       final newOrder = await _orderRepo.createOrder(
         serviceName: widget.service.name,
         serviceType: widget.service.categoryName.isNotEmpty ? widget.service.categoryName : 'Layanan',
-        quantity: _quantity,
+        quantity: _isKiloan ? 0.0 : _quantity,
         unit: widget.service.unit,
         pricePerUnit: widget.service.price,
         deliveryFee: _ongkirFee,
@@ -703,10 +708,10 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
         notes: fullNote,
       );
 
-      // Pre-fetch QRIS payment result BEFORE popping the sheet if QRIS is selected
+      // Pre-fetch QRIS payment result BEFORE popping the sheet if QRIS is selected (hanya untuk non-kiloan)
       XenditPaymentResultModel? qrisPaymentResult;
       final paymentRepo = PaymentRepository();
-      if (isQrisSelected && !_isFreeViaPromosAndPoints) {
+      if (!_isKiloan && isQrisSelected && !_isFreeViaPromosAndPoints) {
         try {
           qrisPaymentResult = await paymentRepo.createXenditPayment(
             newOrder.id,
@@ -725,8 +730,17 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
 
       final targetContext = SessionManager.navigatorKey.currentContext;
 
-      // 1. Jika Lunas via Voucher & Poin
-      if (_isFreeViaPromosAndPoints) {
+      // 1. Jika Layanan Kiloan (Penimbangan dilakukan setelah packing)
+      if (_isKiloan) {
+        if (targetContext != null && targetContext.mounted) {
+          AppToast.showSuccess(
+            targetContext,
+            'Pesanan penjemputan "${widget.service.name}" berhasil dibuat! Pakaian akan ditimbang oleh pihak laundry setelah selesai dipacking.',
+          );
+        }
+      }
+      // 2. Jika Lunas via Voucher & Poin
+      else if (_isFreeViaPromosAndPoints) {
         if (targetContext != null && targetContext.mounted) {
           AppToast.showSuccess(
             targetContext,
@@ -734,7 +748,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
           );
         }
       }
-      // 2. Jika QRIS Otomatis
+      // 3. Jika QRIS Otomatis
       else if (isQrisSelected) {
         if (qrisPaymentResult != null && targetContext != null && targetContext.mounted) {
           XenditQrisSheet.show(
@@ -758,30 +772,27 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
           );
         }
       }
-      // 3. Jika Transfer Bank Manual
+      // 4. Jika Transfer Bank Manual
       else if (!isCashSelected && !isLaundryPay) {
         if (targetContext != null && targetContext.mounted) {
           PaymentProofUploadSheet.show(
             targetContext,
             orderId: newOrder.id,
             invoiceNo: newOrder.invoiceNo,
-            totalAmount: _grandTotal.toInt(),
-            bankName: _selectedPayment?.name ?? '',
-            accountNumber: _selectedPayment?.accountNumber ?? '',
-            accountName: _selectedPayment?.accountName ?? '',
+            totalAmount: newOrder.totalAmount,
             onUploadedSuccess: () {
               final rootCtx = SessionManager.navigatorKey.currentContext;
               if (rootCtx != null && rootCtx.mounted) {
                 AppToast.showSuccess(
                   rootCtx,
-                  'Pesanan #${newOrder.invoiceNo} dibuat! Bukti transfer diterima.',
+                  'Bukti pembayaran berhasil diunggah! Menunggu verifikasi admin.',
                 );
               }
             },
           );
         }
       }
-      // 4. Jika LaundryPay
+      // 5. Jika LaundryPay (Non-Kiloan Lunas)
       else if (isLaundryPay) {
         if (targetContext != null && targetContext.mounted) {
           AppToast.showSuccess(
@@ -790,7 +801,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
           );
         }
       }
-      // 5. Jika Tunai
+      // 6. Jika Tunai / COD
       else {
         if (targetContext != null && targetContext.mounted) {
           AppToast.showSuccess(
@@ -1122,51 +1133,88 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
               ),
               const SizedBox(height: 14),
 
-              // 3. Jumlah / Berat Selector
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              // 3. Jumlah / Berat Selector (Satuan) atau Info Penimbangan (Kiloan)
+              if (_isKiloan) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
                     children: [
-                      const Text('Jumlah / Estimasi Berat', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                      Text(
-                        widget.service.unit == 'kg' ? 'Disesuaikan saat timbang kurir' : 'Jumlah satuan',
-                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(LucideIcons.scale, size: 20, color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Penimbangan oleh Pihak Laundry',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Berat cucian akan ditimbang akurat setelah pakaian selesai dicuci dan dipacking. Total pembayaran diterbitkan setelah penimbangan.',
+                              style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.3),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  Row(
-                    children: [
-                      IconButton.filledTonal(
-                        onPressed: _quantity > 1.0 ? () => setState(() => _quantity -= 1.0) : null,
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.surfaceVariant,
-                          foregroundColor: AppColors.textPrimary,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ] else ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Jumlah Satuan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                        Text('Jumlah pakaian/barang', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        IconButton.filledTonal(
+                          onPressed: _quantity > 1.0 ? () => setState(() => _quantity -= 1.0) : null,
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceVariant,
+                            foregroundColor: AppColors.textPrimary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(LucideIcons.minus, size: 16),
                         ),
-                        icon: const Icon(LucideIcons.minus, size: 16),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          '${_quantity.toInt()} ${widget.service.unit}',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            '${_quantity.toInt()} ${widget.service.unit}',
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                          ),
                         ),
-                      ),
-                      IconButton.filled(
-                        onPressed: () => setState(() => _quantity += 1.0),
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        IconButton.filled(
+                          onPressed: () => setState(() => _quantity += 1.0),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(LucideIcons.plus, size: 16),
                         ),
-                        icon: const Icon(LucideIcons.plus, size: 16),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 14),
 
               // 4. Pilihan Parfum
@@ -1221,8 +1269,16 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Estimasi Layanan (${_quantity.toInt()} ${widget.service.unit})', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                        Text(CurrencyFormatter.formatRupiah(_subtotal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                        Text(
+                          _isKiloan ? 'Tarif Layanan Kiloan' : 'Estimasi Layanan (${_quantity.toInt()} ${widget.service.unit})',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        Text(
+                          _isKiloan
+                              ? '@${CurrencyFormatter.formatRupiah(widget.service.price)}/kg'
+                              : CurrencyFormatter.formatRupiah(_subtotal),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -1244,9 +1300,12 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total Estimasi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                         Text(
-                          CurrencyFormatter.formatRupiah(_subtotal + _ongkirFee),
+                          _isKiloan ? 'Biaya di Muka' : 'Total Estimasi',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                        Text(
+                          _isKiloan ? 'Rp 0 (Bayar Nanti)' : CurrencyFormatter.formatRupiah(_subtotal + _ongkirFee),
                           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary),
                         ),
                       ],
@@ -1552,8 +1611,43 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                       final currentBal = _currentUser.laundryPayBalance;
                       final requiredTotal = _grandTotal.toInt();
                       final isShort = currentBal < requiredTotal;
-                      final shortage = requiredTotal - currentBal;
+                      if (_isKiloan) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryLight.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(LucideIcons.wallet, color: AppColors.primary, size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Saldo LaundryPay: ${CurrencyFormatter.formatRupiah(currentBal)}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Saldo LaundryPay Anda akan otomatis terpotong saat pakaian selesai ditimbang dan dipacking. Jika saldo tidak cukup saat penimbangan, Anda dapat melakukan top-up atau beralih ke metode lain.',
+                                style: TextStyle(fontSize: 10, color: AppColors.textSecondary, height: 1.35),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
 
+                      final shortage = requiredTotal - currentBal;
                       if (isShort) {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
@@ -1709,29 +1803,43 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total Pembayaran', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                         Text(
-                          CurrencyFormatter.formatRupiah(_grandTotal),
+                          _isKiloan ? 'Total Pembayaran di Muka' : 'Total Pembayaran',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                        Text(
+                          _isKiloan ? 'Rp 0 (Bayar Nanti)' : CurrencyFormatter.formatRupiah(_grandTotal),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary),
                         ),
                       ],
                     ),
+                    if (_isKiloan) ...[
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Total tagihan diterbitkan setelah pakaian selesai ditimbang & dipacking',
+                        style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                      ),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(height: 16),
 
               CustomButton(
-                text: _isFreeViaPromosAndPoints
-                    ? 'Konfirmasi Pesan (Gratis)'
-                    : (!isCashSelected
-                        ? (isQrisSelected ? 'Bayar via QRIS Sekarang' : 'Bayar via ${_selectedPayment?.name ?? 'Xendit'} Sekarang')
-                        : 'Konfirmasi Pesan Laundry'),
-                icon: _isFreeViaPromosAndPoints
-                    ? LucideIcons.checkCheck
-                    : (isQrisSelected
-                        ? LucideIcons.qrCode
-                        : (!isCashSelected ? LucideIcons.creditCard : LucideIcons.checkCheck)),
+                text: _isKiloan
+                    ? 'Konfirmasi Penjemputan'
+                    : (_isFreeViaPromosAndPoints
+                        ? 'Konfirmasi Pesan (Gratis)'
+                        : (!isCashSelected
+                            ? (isQrisSelected ? 'Bayar via QRIS Sekarang' : 'Bayar via ${_selectedPayment?.name ?? 'Xendit'} Sekarang')
+                            : 'Konfirmasi Pesan Laundry')),
+                icon: _isKiloan
+                    ? LucideIcons.truck
+                    : (_isFreeViaPromosAndPoints
+                        ? LucideIcons.checkCheck
+                        : (isQrisSelected
+                            ? LucideIcons.qrCode
+                            : (!isCashSelected ? LucideIcons.creditCard : LucideIcons.checkCheck))),
                 isLoading: _isSubmitting,
                 onPressed: _handleConfirmOrder,
               ),

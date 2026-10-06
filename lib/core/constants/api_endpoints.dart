@@ -70,6 +70,8 @@ class ApiEndpoints {
 
   // Payment Gateway & Manual Proof Endpoints
   static const String uploadPaymentProof = '/payments/proof';
+  static const String payWithLaundryPay = '/payments/pay-with-laundrypay';
+  static const String switchPaymentMethod = '/payments/switch-method';
   static String paymentStatus(String orderId) => '/payments/status/$orderId';
   static const String createXenditPayment = '/payments/xendit/create';
   static const String createXenditQris = '/payments/xendit/create-qr';

@@ -10,6 +10,8 @@ abstract class IPaymentRepository {
   Future<bool> simulatePayment(String orderId);
   Future<String> getPaymentStatus(String orderId);
   Future<XenditPaymentResultModel?> getPaymentDetails(String orderId);
+  Future<Map<String, dynamic>> payWithLaundryPay(String orderId);
+  Future<bool> switchPaymentMethod(String orderId, String method);
 }
 
 class PaymentRepository implements IPaymentRepository {
@@ -104,5 +106,34 @@ class PaymentRepository implements IPaymentRepository {
       }
     } catch (_) {}
     return null;
+  }
+
+  @override
+  Future<Map<String, dynamic>> payWithLaundryPay(String orderId) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.payWithLaundryPay,
+      body: {'order_id': orderId},
+    );
+
+    if (response is Map) {
+      return Map<String, dynamic>.from(response['data'] ?? response);
+    }
+    throw Exception('Gagal memproses pembayaran dengan Saldo LaundryPay');
+  }
+
+  @override
+  Future<bool> switchPaymentMethod(String orderId, String method) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.switchPaymentMethod,
+      body: {
+        'order_id': orderId,
+        'payment_method': method,
+      },
+    );
+
+    if (response is Map) {
+      return response['success'] == true;
+    }
+    return true;
   }
 }

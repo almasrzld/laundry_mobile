@@ -12,6 +12,8 @@ import '../../../../data/models/user_model.dart';
 import '../../../../data/models/payment_model.dart';
 import '../../../../data/repositories/order_repository.dart';
 import '../../../../data/repositories/payment_repository.dart';
+import '../../../../data/repositories/user_repository.dart';
+import '../../../profile/presentation/widgets/top_up_sheet.dart';
 import '../widgets/payment_proof_upload_sheet.dart';
 import 'package:laundry_app/features/services/presentation/widgets/xendit_qris_sheet.dart';
 
@@ -67,13 +69,18 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     });
     final fresh = await _orderRepository.getOrderById(effectiveId);
     final paymentInfo = await _paymentRepository.getPaymentDetails(effectiveId);
+    UserModel? freshUser = user;
+    try {
+      freshUser = await UserRepository().getProfile();
+    } catch (_) {}
+
     if (mounted) {
       setState(() {
         if (fresh != null) {
           _currentOrder = fresh;
         }
         _paymentDetails = paymentInfo;
-        _currentUser = user;
+        _currentUser = freshUser;
         _isLoading = false;
       });
     }
@@ -145,13 +152,39 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Text(
-                          order.serviceName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                order.serviceName,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            if (order.isWaitingWeighing)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF3C7),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFF59E0B)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.scale, size: 12, color: Color(0xFFB45309)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Menunggu Timbang',
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -462,8 +495,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         ),
                         const SizedBox(height: 12),
                         _buildPriceRow(
-                          'Biaya Layanan (${order.quantity} ${order.unit})',
-                          CurrencyFormatter.formatRupiah(order.subtotal),
+                          'Biaya Layanan (${order.quantity > 0 ? '${order.quantity} ' : ''}${order.unit})',
+                          order.isWaitingWeighing
+                              ? 'Menunggu Penimbangan'
+                              : CurrencyFormatter.formatRupiah(order.subtotal),
                         ),
                         const SizedBox(height: 8),
                         _buildPriceRow(
@@ -491,143 +526,285 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                               ),
                             ),
                             Text(
-                              CurrencyFormatter.formatRupiah(order.totalAmount),
-                              style: const TextStyle(
-                                fontSize: 17,
+                              order.isWaitingWeighing
+                                  ? 'Menunggu Penimbangan'
+                                  : CurrencyFormatter.formatRupiah(order.totalAmount),
+                              style: TextStyle(
+                                fontSize: order.isWaitingWeighing ? 13 : 17,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
+                                color: order.isWaitingWeighing ? const Color(0xFFD97706) : AppColors.primary,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
 
-                        // Status Verifikasi & Upload Bukti Pembayaran
-                        Builder(
-                          builder: (context) {
-                            final isPaid = order.notes.toUpperCase().contains('LUNAS') ||
-                                _paymentDetails?.status == 'PAID';
-                            final hasProof = _paymentDetails?.proofImage != null &&
-                                _paymentDetails!.proofImage!.isNotEmpty;
-                            final isCash = order.notes.toLowerCase().contains('tunai') ||
-                                order.notes.toLowerCase().contains('cash') ||
-                                order.notes.toLowerCase().contains('cod');
-                            final isQris = order.notes.toLowerCase().contains('qris') ||
-                                (_paymentDetails?.paymentMethod.toLowerCase().contains('qris') ?? false);
-
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isPaid
-                                    ? AppColors.success.withValues(alpha: 0.08)
-                                    : hasProof
-                                        ? AppColors.warning.withValues(alpha: 0.08)
-                                        : AppColors.primaryLight.withValues(alpha: 0.4),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isPaid
-                                      ? AppColors.success.withValues(alpha: 0.3)
-                                      : hasProof
-                                          ? AppColors.warning.withValues(alpha: 0.4)
-                                          : AppColors.primary.withValues(alpha: 0.25),
+                        // Status Verifikasi & Aksi Pembayaran
+                        if (order.isWaitingWeighing) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7).withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFDE68A),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(LucideIcons.scale, size: 20, color: Color(0xFFD97706)),
                                 ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            isPaid
-                                                ? LucideIcons.circleCheck
-                                                : (hasProof ? LucideIcons.clock : LucideIcons.receipt),
-                                            size: 15,
-                                            color: isPaid
-                                                ? AppColors.success
-                                                : (hasProof ? AppColors.warning : AppColors.primary),
+                                      Text(
+                                        'Menunggu Penimbangan Pihak Laundry',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF92400E),
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Pakaian Anda akan ditimbang setelah proses pencucian & packing selesai oleh pihak laundry. Total tagihan dan pembayaran akan otomatis diperbarui sesuai berat riil.',
+                                        style: TextStyle(fontSize: 11, color: Color(0xFF78350F), height: 1.35),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          Builder(
+                            builder: (context) {
+                              final isPaid = order.notes.toUpperCase().contains('LUNAS') ||
+                                  _paymentDetails?.status == 'PAID';
+                              final hasProof = _paymentDetails?.proofImage != null &&
+                                  _paymentDetails!.proofImage!.isNotEmpty;
+                              final isCash = order.notes.toLowerCase().contains('tunai') ||
+                                  order.notes.toLowerCase().contains('cash') ||
+                                  order.notes.toLowerCase().contains('cod');
+                              final isQris = order.notes.toLowerCase().contains('qris') ||
+                                  (_paymentDetails?.paymentMethod.toLowerCase().contains('qris') ?? false);
+                              final isLaundryPayPreferred = order.notes.toLowerCase().contains('laundrypay');
+                              final currentBalance = _currentUser?.laundryPayBalance ?? 0;
+                              final shortage = order.totalAmount - currentBalance;
+                              final canPayLaundryPay = currentBalance >= order.totalAmount;
+
+                              if (isPaid) {
+                                return Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.success.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.circleCheck, size: 18, color: AppColors.success),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          isLaundryPayPreferred
+                                              ? 'Lunas Terbayar via Saldo LaundryPay'
+                                              : 'Pembayaran Lunas',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.success,
                                           ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            isPaid
-                                                ? 'Pembayaran Lunas'
-                                                : (hasProof ? 'Menunggu Verifikasi Admin' : 'Status: Menunggu Pembayaran'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: hasProof
+                                      ? AppColors.warning.withValues(alpha: 0.08)
+                                      : (isLaundryPayPreferred && shortage > 0
+                                          ? AppColors.error.withValues(alpha: 0.06)
+                                          : AppColors.primaryLight.withValues(alpha: 0.35)),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: hasProof
+                                        ? AppColors.warning.withValues(alpha: 0.4)
+                                        : (isLaundryPayPreferred && shortage > 0
+                                            ? AppColors.error.withValues(alpha: 0.3)
+                                            : AppColors.primary.withValues(alpha: 0.25)),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          hasProof
+                                              ? LucideIcons.clock
+                                              : (isLaundryPayPreferred && shortage > 0
+                                                  ? LucideIcons.alertCircle
+                                                  : (isCash ? LucideIcons.banknote : LucideIcons.receipt)),
+                                          size: 16,
+                                          color: hasProof
+                                              ? AppColors.warning
+                                              : (isLaundryPayPreferred && shortage > 0 ? AppColors.error : AppColors.primary),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            hasProof
+                                                ? 'Menunggu Verifikasi Admin'
+                                                : (isLaundryPayPreferred && shortage > 0
+                                                    ? 'Saldo LaundryPay Tidak Cukup'
+                                                    : (isCash ? 'Metode: Tunai / COD' : 'Menunggu Pembayaran')),
                                             style: TextStyle(
-                                              fontSize: 11,
+                                              fontSize: 12,
                                               fontWeight: FontWeight.bold,
-                                              color: isPaid
-                                                  ? AppColors.success
-                                                  : (hasProof ? AppColors.warning : AppColors.primary),
+                                              color: hasProof
+                                                  ? AppColors.warning
+                                                  : (isLaundryPayPreferred && shortage > 0 ? AppColors.error : AppColors.primary),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (hasProof) ...[
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'Bukti transfer (WebP \u2264 1MB) berhasil diunggah dan sedang diperiksa oleh kasir/admin.',
+                                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                      ),
+                                    ] else if (isLaundryPayPreferred && shortage > 0) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Total tagihan ${CurrencyFormatter.formatRupiah(order.totalAmount)}, saldo Anda saat ini ${CurrencyFormatter.formatRupiah(currentBalance)} (Kurang: ${CurrencyFormatter.formatRupiah(shortage)}).\nSilakan isi saldo atau gunakan metode pembayaran lain.',
+                                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
+                                      ),
+                                    ] else if (isCash) ...[
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'Siapkan uang pas saat kurir Almas mengantarkan cucian Anda.',
+                                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 12),
+
+                                    // Action Buttons
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        if (isLaundryPayPreferred && canPayLaundryPay)
+                                          ElevatedButton.icon(
+                                            onPressed: () => _payWithLaundryPay(order),
+                                            icon: const Icon(LucideIcons.wallet, size: 13, color: Colors.white),
+                                            label: const Text('Bayar via Saldo', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.primary,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              minimumSize: Size.zero,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              elevation: 0,
+                                            ),
+                                          ),
+                                        if (isLaundryPayPreferred && shortage > 0) ...[
+                                          ElevatedButton.icon(
+                                            onPressed: () {
+                                              if (_currentUser != null) {
+                                                TopUpSheet.show(
+                                                  context,
+                                                  user: _currentUser!,
+                                                  prefillAmount: shortage,
+                                                  prefillReason: 'Pelunasan Pesanan ${order.invoiceNo}',
+                                                  onTopUpSuccess: () async {
+                                                    await _refreshDetail();
+                                                    if (mounted) {
+                                                      _payWithLaundryPay(order);
+                                                    }
+                                                  },
+                                                );
+                                              }
+                                            },
+                                            icon: const Icon(LucideIcons.plusCircle, size: 13, color: Colors.white),
+                                            label: const Text('Isi Saldo LaundryPay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.primary,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              minimumSize: Size.zero,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              elevation: 0,
                                             ),
                                           ),
                                         ],
-                                      ),
-                                      if (!isPaid && !isCash)
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (isQris) ...[
-                                              ElevatedButton.icon(
-                                                onPressed: () => _openQrisSheet(order),
-                                                icon: const Icon(LucideIcons.qrCode, size: 12, color: Colors.white),
-                                                label: const Text(
-                                                  'Bayar QRIS',
-                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
-                                                ),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: AppColors.primary,
-                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                  minimumSize: Size.zero,
-                                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                  elevation: 0,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 6),
-                                            ],
-                                            ElevatedButton.icon(
-                                              onPressed: () {
-                                                PaymentProofUploadSheet.show(
-                                                  context,
-                                                  orderId: order.id,
-                                                  invoiceNo: order.invoiceNo,
-                                                  totalAmount: order.totalAmount,
-                                                  onUploadedSuccess: () => _refreshDetail(),
-                                                );
-                                              },
-                                              icon: const Icon(LucideIcons.uploadCloud, size: 12, color: Colors.white),
-                                              label: Text(
-                                                hasProof ? 'Ganti Bukti' : 'Upload Bukti',
-                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
-                                              ),
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: isQris ? AppColors.surfaceVariant : AppColors.primary,
-                                                foregroundColor: isQris ? AppColors.textPrimary : Colors.white,
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                minimumSize: Size.zero,
-                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                elevation: 0,
-                                              ),
+                                        if (isQris) ...[
+                                          ElevatedButton.icon(
+                                            onPressed: () => _openQrisSheet(order),
+                                            icon: const Icon(LucideIcons.qrCode, size: 13, color: Colors.white),
+                                            label: const Text('Bayar QRIS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.primary,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              minimumSize: Size.zero,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              elevation: 0,
                                             ),
-                                          ],
+                                          ),
+                                        ],
+                                        if (!isPaid && !isCash && !isLaundryPayPreferred) ...[
+                                          ElevatedButton.icon(
+                                            onPressed: () {
+                                              PaymentProofUploadSheet.show(
+                                                context,
+                                                orderId: order.id,
+                                                invoiceNo: order.invoiceNo,
+                                                totalAmount: order.totalAmount,
+                                                onUploadedSuccess: () => _refreshDetail(),
+                                              );
+                                            },
+                                            icon: const Icon(LucideIcons.uploadCloud, size: 13, color: Colors.white),
+                                            label: Text(hasProof ? 'Ganti Bukti' : 'Upload Bukti', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: isQris ? AppColors.surfaceVariant : AppColors.primary,
+                                              foregroundColor: isQris ? AppColors.textPrimary : Colors.white,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              minimumSize: Size.zero,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                              elevation: 0,
+                                            ),
+                                          ),
+                                        ],
+                                        OutlinedButton.icon(
+                                          onPressed: () => _showPaymentOptionsModal(order),
+                                          icon: const Icon(LucideIcons.arrowRightLeft, size: 13, color: AppColors.primary),
+                                          label: const Text('Pilih Metode Lain', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                          style: OutlinedButton.styleFrom(
+                                            side: const BorderSide(color: AppColors.primary),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            minimumSize: Size.zero,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
                                         ),
-                                    ],
-                                  ),
-                                  if (hasProof && !isPaid) ...[
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      'Bukti transfer (WebP \u2264 1MB) berhasil diunggah dan sedang diperiksa oleh kasir/admin.',
-                                      style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                                      ],
                                     ),
                                   ],
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -687,6 +864,256 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         AppToast.showError(context, 'Gagal memuat QRIS: $e');
       }
     }
+  }
+
+  Future<void> _payWithLaundryPay(OrderModel order) async {
+    try {
+      AppToast.showInfo(context, 'Memproses pembayaran via Saldo LaundryPay...');
+      await _paymentRepository.payWithLaundryPay(order.id);
+      if (!mounted) return;
+      AppToast.showSuccess(context, 'Pembayaran berhasil menggunakan Saldo LaundryPay!');
+      await _refreshDetail();
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.showError(context, e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Future<void> _handleSwitchPaymentMethod(OrderModel order, String method) async {
+    try {
+      AppToast.showInfo(context, 'Memperbarui metode pembayaran...');
+      final ok = await _paymentRepository.switchPaymentMethod(order.id, method);
+      if (!ok) {
+        throw Exception('Gagal memperbarui metode pembayaran');
+      }
+      if (!mounted) return;
+
+      if (method == 'QRIS') {
+        await _refreshDetail();
+        if (!mounted) return;
+        _openQrisSheet(order);
+      } else if (method.toLowerCase().contains('transfer')) {
+        await _refreshDetail();
+        if (!mounted) return;
+        PaymentProofUploadSheet.show(
+          context,
+          orderId: order.id,
+          invoiceNo: order.invoiceNo,
+          totalAmount: order.totalAmount,
+          onUploadedSuccess: () => _refreshDetail(),
+        );
+      } else {
+        // Tunai / COD
+        if (mounted) {
+          AppToast.showSuccess(context, 'Metode pembayaran diubah ke Tunai / COD');
+        }
+        await _refreshDetail();
+      }
+    } catch (e) {
+      if (mounted) {
+        AppToast.showError(context, 'Gagal mengubah metode: $e');
+      }
+    }
+  }
+
+  void _showPaymentOptionsModal(OrderModel order) {
+    final balance = _currentUser?.laundryPayBalance ?? 0;
+    final canUseLaundryPay = balance >= order.totalAmount;
+    final shortage = order.totalAmount - balance;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Pilih Metode Pembayaran',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Total tagihan: ${CurrencyFormatter.formatRupiah(order.totalAmount)}',
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+
+              // Opsi 1: Saldo LaundryPay
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(12),
+                  color: AppColors.surface,
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(LucideIcons.wallet, color: AppColors.primary, size: 20),
+                  ),
+                  title: const Text('Saldo LaundryPay', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text(
+                    canUseLaundryPay
+                        ? 'Saldo: ${CurrencyFormatter.formatRupiah(balance)} (Cukup)'
+                        : 'Saldo: ${CurrencyFormatter.formatRupiah(balance)} (Kurang: ${CurrencyFormatter.formatRupiah(shortage)})',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: canUseLaundryPay ? AppColors.success : AppColors.error,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  trailing: canUseLaundryPay
+                      ? ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(modalCtx);
+                            _payWithLaundryPay(order);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('Bayar', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                        )
+                      : OutlinedButton(
+                          onPressed: () {
+                            Navigator.pop(modalCtx);
+                            if (_currentUser != null) {
+                              TopUpSheet.show(
+                                context,
+                                user: _currentUser!,
+                                prefillAmount: shortage,
+                                prefillReason: 'Pelunasan Pesanan ${order.invoiceNo}',
+                                onTopUpSuccess: () async {
+                                  await _refreshDetail();
+                                  if (mounted) {
+                                    _payWithLaundryPay(order);
+                                  }
+                                },
+                              );
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('Top Up', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Opsi 2: QRIS
+              _buildPaymentOptionTile(
+                icon: LucideIcons.qrCode,
+                title: 'QRIS',
+                subtitle: 'Bayar instan via GoPay, OVO, DANA, BCA, dll.',
+                onTap: () {
+                  Navigator.pop(modalCtx);
+                  _handleSwitchPaymentMethod(order, 'QRIS');
+                },
+              ),
+              const SizedBox(height: 10),
+
+              // Opsi 3: Transfer Bank
+              _buildPaymentOptionTile(
+                icon: LucideIcons.landmark,
+                title: 'Transfer Bank Manual',
+                subtitle: 'Upload bukti transfer (BCA, Mandiri, BRI, BNI)',
+                onTap: () {
+                  Navigator.pop(modalCtx);
+                  _handleSwitchPaymentMethod(order, 'Transfer Bank');
+                },
+              ),
+              const SizedBox(height: 10),
+
+              // Opsi 4: Tunai / COD
+              _buildPaymentOptionTile(
+                icon: LucideIcons.banknote,
+                title: 'Tunai / COD',
+                subtitle: 'Bayar tunai kepada kurir saat cucian diantar',
+                onTap: () {
+                  Navigator.pop(modalCtx);
+                  _handleSwitchPaymentMethod(order, 'Tunai / COD');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPaymentOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(12),
+          color: AppColors.surface,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            const Icon(LucideIcons.chevronRight, size: 16, color: AppColors.textSecondary),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showCourierContactSheet(OrderModel order) {

@@ -99,6 +99,8 @@ class OrderModel {
 
   bool get isRated => (rating != null && rating! > 0);
   bool get isCompleted => status == OrderStatusType.completed || statusName.toLowerCase().contains('selesai');
+  bool get isKiloan => unit.toLowerCase() == 'kg' || serviceType.toLowerCase().contains('kilo');
+  bool get isWaitingWeighing => isKiloan && quantity <= 0;
 
   int get subtotal => (quantity * pricePerUnit).round();
   int get totalAmount => subtotal + deliveryFee - discount;
