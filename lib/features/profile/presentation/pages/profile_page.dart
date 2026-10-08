@@ -2223,45 +2223,25 @@ class _ProfilePageState extends State<ProfilePage> {
                           return m.isActive && !isCash && !isQris && !isWallet && !isLPay;
                         }).toList();
 
-                        if (bankMethods.isNotEmpty) {
-                          return Column(
-                            children: bankMethods.map((pm) {
-                              final accNum = pm.accountNumber ?? '1234567890';
-                              final accName = pm.accountName != null && pm.accountName!.isNotEmpty
-                                  ? 'a.n. ${pm.accountName}'
-                                  : 'a.n. Almas Rizaldi';
-                              return _buildPaymentChannelItem(
-                                icon: LucideIcons.building2,
-                                iconColor: AppColors.primary,
-                                iconBg: AppColors.primaryLight.withValues(alpha: 0.3),
-                                title: pm.name,
-                                subtitle: '$accNum • $accName',
-                                copyValue: accNum,
-                              );
-                            }).toList(),
-                          );
+                        if (bankMethods.isEmpty) {
+                          return const SizedBox.shrink();
                         }
 
-                        // Default verified official banks
                         return Column(
-                          children: [
-                            _buildPaymentChannelItem(
+                          children: bankMethods.map((pm) {
+                            final accNum = pm.accountNumber ?? '-';
+                            final accName = pm.accountName != null && pm.accountName!.isNotEmpty
+                                ? 'a.n. ${pm.accountName}'
+                                : '';
+                            return _buildPaymentChannelItem(
                               icon: LucideIcons.building2,
                               iconColor: AppColors.primary,
                               iconBg: AppColors.primaryLight.withValues(alpha: 0.3),
-                              title: 'Bank Mandiri',
-                              subtitle: '1234567890 • a.n. Almas Rizaldi',
-                              copyValue: '1234567890',
-                            ),
-                            _buildPaymentChannelItem(
-                              icon: LucideIcons.building2,
-                              iconColor: AppColors.primary,
-                              iconBg: AppColors.primaryLight.withValues(alpha: 0.3),
-                              title: 'Bank BRI',
-                              subtitle: '1234567890 • a.n. Almas Rizaldi',
-                              copyValue: '1234567890',
-                            ),
-                          ],
+                              title: pm.name,
+                              subtitle: accName.isNotEmpty ? '$accNum • $accName' : accNum,
+                              copyValue: accNum != '-' ? accNum : pm.name,
+                            );
+                          }).toList(),
                         );
                       },
                     ),
@@ -2282,21 +2262,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         }).toList();
 
                         if (ewalletMethods.isEmpty) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Transfer E-Wallet Resmi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                              const SizedBox(height: 8),
-                              _buildPaymentChannelItem(
-                                icon: LucideIcons.smartphone,
-                                iconColor: const Color(0xFF0284C7),
-                                iconBg: const Color(0xFFE0F2FE),
-                                title: 'GoPay / DANA',
-                                subtitle: '081215199600 • a.n. Almas Rizaldi',
-                                copyValue: '081215199600',
-                              ),
-                            ],
-                          );
+                          return const SizedBox.shrink();
                         }
 
                         return Column(
@@ -2305,17 +2271,17 @@ class _ProfilePageState extends State<ProfilePage> {
                             const Text('Transfer E-Wallet Resmi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                             const SizedBox(height: 8),
                             ...ewalletMethods.map((pm) {
-                              final phone = pm.accountNumber ?? '081215199600';
+                              final phone = pm.accountNumber ?? '-';
                               final name = pm.accountName != null && pm.accountName!.isNotEmpty
                                   ? 'a.n. ${pm.accountName}'
-                                  : 'a.n. Almas Rizaldi';
+                                  : '';
                               return _buildPaymentChannelItem(
                                 icon: LucideIcons.smartphone,
                                 iconColor: const Color(0xFF0284C7),
                                 iconBg: const Color(0xFFE0F2FE),
                                 title: pm.name,
-                                subtitle: '$phone • $name',
-                                copyValue: phone,
+                                subtitle: name.isNotEmpty ? '$phone • $name' : phone,
+                                copyValue: phone != '-' ? phone : pm.name,
                               );
                             }),
                           ],

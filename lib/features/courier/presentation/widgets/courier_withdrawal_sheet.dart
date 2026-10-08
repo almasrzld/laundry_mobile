@@ -53,23 +53,12 @@ class _CourierWithdrawalSheetState extends State<CourierWithdrawalSheet> {
   final _accountNameController = TextEditingController();
 
   late int _availableBalance;
-  String _selectedDestination = 'BCA';
+  String _selectedDestination = '';
   bool _isSubmitting = false;
 
   late Future<List<WithdrawalRequestModel>> _withdrawalsFuture;
   bool _isLoadingPaymentMethods = true;
-
-  List<Map<String, dynamic>> _destinationOptions = [
-    {'name': 'Bank BCA', 'code': 'BCA', 'type': 'bank'},
-    {'name': 'Bank Mandiri', 'code': 'Mandiri', 'type': 'bank'},
-    {'name': 'Bank BRI', 'code': 'BRI', 'type': 'bank'},
-    {'name': 'Bank BNI', 'code': 'BNI', 'type': 'bank'},
-    {'name': 'Bank BSI (Syariah)', 'code': 'BSI', 'type': 'bank'},
-    {'name': 'GoPay', 'code': 'GoPay', 'type': 'ewallet'},
-    {'name': 'OVO', 'code': 'OVO', 'type': 'ewallet'},
-    {'name': 'DANA', 'code': 'DANA', 'type': 'ewallet'},
-    {'name': 'ShopeePay', 'code': 'ShopeePay', 'type': 'ewallet'},
-  ];
+  List<Map<String, dynamic>> _destinationOptions = [];
 
   @override
   void initState() {
@@ -86,15 +75,21 @@ class _CourierWithdrawalSheetState extends State<CourierWithdrawalSheet> {
 
       final List<Map<String, dynamic>> dynamicOptions = [];
       for (final pm in methods) {
+        if (!pm.isActive) continue;
         final codeLower = pm.code.toLowerCase();
         final nameLower = pm.name.toLowerCase();
 
-        // Lewati metode yang bukan pembayaran rekening / transfer / ewallet (misal: tunai / cash)
+        // Lewati metode yang bukan pembayaran rekening / transfer / ewallet (misal: tunai / cash / qris / laundrypay)
         if (codeLower.contains('cash') ||
             codeLower.contains('tunai') ||
             nameLower.contains('tunai') ||
-            codeLower.contains('pos') ||
-            codeLower.contains('cod')) {
+            codeLower.contains('qris') ||
+            nameLower.contains('qris') ||
+            codeLower.contains('laundrypay') ||
+            nameLower.contains('laundrypay') ||
+            pm.type == 'cash' ||
+            pm.type == 'qris' ||
+            pm.type == 'laundrypay') {
           continue;
         }
 
@@ -105,17 +100,21 @@ class _CourierWithdrawalSheetState extends State<CourierWithdrawalSheet> {
             codeLower.contains('shopeepay') ||
             codeLower.contains('linkaja');
 
-        dynamicOptions.add({
-          'name': pm.name,
-          'code': pm.code.isNotEmpty ? pm.code : pm.name,
-          'type': isEwallet ? 'ewallet' : 'bank',
-        });
+        final displayName = pm.name.isNotEmpty ? pm.name : pm.code;
+
+        if (!dynamicOptions.any((opt) => opt['name'] == displayName)) {
+          dynamicOptions.add({
+            'name': displayName,
+            'code': displayName,
+            'type': isEwallet ? 'ewallet' : 'bank',
+          });
+        }
       }
 
       if (dynamicOptions.isNotEmpty) {
         setState(() {
           _destinationOptions = dynamicOptions;
-          if (!_destinationOptions.any((opt) => opt['code'] == _selectedDestination)) {
+          if (_selectedDestination.isEmpty || !_destinationOptions.any((opt) => opt['code'] == _selectedDestination)) {
             _selectedDestination = _destinationOptions.first['code'] as String;
           }
           _isLoadingPaymentMethods = false;
