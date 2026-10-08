@@ -10,9 +10,11 @@ import '../../../../core/widgets/status_badge.dart';
 import '../../../../data/models/order_model.dart';
 import '../../../../data/models/user_model.dart';
 import '../../../../data/models/payment_model.dart';
+import '../../../../data/models/promo_model.dart';
 import '../../../../data/repositories/order_repository.dart';
 import '../../../../data/repositories/payment_repository.dart';
 import '../../../../data/repositories/user_repository.dart';
+import '../../../../data/repositories/promo_repository.dart';
 import '../../../profile/presentation/widgets/top_up_sheet.dart';
 import '../widgets/payment_proof_upload_sheet.dart';
 import 'package:laundry_app/features/services/presentation/widgets/xendit_qris_sheet.dart';
@@ -505,6 +507,96 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                           'Biaya Ongkir Antar-Jemput',
                           CurrencyFormatter.formatRupiah(order.deliveryFee),
                         ),
+                        if (!order.isWaitingWeighing && !(order.notes.toUpperCase().contains('LUNAS') || _paymentDetails?.status == 'PAID' || order.isCompleted)) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: order.discount > 0
+                                  ? const Color(0xFFECFDF5)
+                                  : AppColors.surfaceVariant.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: order.discount > 0
+                                    ? const Color(0xFF10B981)
+                                    : AppColors.border,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: order.discount > 0
+                                        ? const Color(0xFFD1FAE5)
+                                        : AppColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    LucideIcons.ticketPercent,
+                                    size: 18,
+                                    color: order.discount > 0 ? const Color(0xFF059669) : AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        order.discount > 0 ? 'Promo Terpasang' : 'Voucher & Promo',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: order.discount > 0 ? const Color(0xFF065F46) : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        order.discount > 0
+                                            ? 'Diskon ${CurrencyFormatter.formatRupiah(order.discount)}'
+                                            : 'Gunakan voucher untuk dapat diskon',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          color: order.discount > 0 ? const Color(0xFF047857) : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (order.discount > 0) ...[
+                                  TextButton(
+                                    onPressed: () => _openPromoPicker(order),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text('Ganti', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF059669))),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(LucideIcons.trash2, size: 16, color: Color(0xFFE11D48)),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'Hapus Promo',
+                                    onPressed: () => _removePromo(order),
+                                  ),
+                                ] else ...[
+                                  ElevatedButton(
+                                    onPressed: () => _openPromoPicker(order),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                      minimumSize: Size.zero,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      elevation: 0,
+                                    ),
+                                    child: const Text('Pakai Promo', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
                         if (order.discount > 0) ...[
                           const SizedBox(height: 8),
                           _buildPriceRow(
@@ -714,7 +806,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                             label: const Text('Bayar via Saldo', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: AppColors.primary,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                               minimumSize: Size.zero,
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                               elevation: 0,
@@ -742,7 +834,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                             label: const Text('Isi Saldo LaundryPay', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: AppColors.primary,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                               minimumSize: Size.zero,
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                               elevation: 0,
@@ -756,7 +848,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                             label: const Text('Bayar QRIS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: AppColors.primary,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                               minimumSize: Size.zero,
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                               elevation: 0,
@@ -779,7 +871,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: isQris ? AppColors.surfaceVariant : AppColors.primary,
                                               foregroundColor: isQris ? AppColors.textPrimary : Colors.white,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                               minimumSize: Size.zero,
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                               elevation: 0,
@@ -792,7 +884,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                           label: const Text('Pilih Metode Lain', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                           style: OutlinedButton.styleFrom(
                                             side: const BorderSide(color: AppColors.primary),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                             minimumSize: Size.zero,
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                           ),
@@ -842,6 +934,299 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _applyPromo(OrderModel order, String code) async {
+    try {
+      AppToast.showInfo(context, 'Memasang voucher "$code"...');
+      final updated = await _orderRepository.applyPromo(order.id, code);
+      if (mounted) {
+        setState(() {
+          _currentOrder = updated;
+        });
+        AppToast.showSuccess(context, 'Voucher "$code" berhasil dipasang!');
+        await _refreshDetail();
+      }
+    } catch (e) {
+      if (mounted) {
+        AppToast.showError(context, e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', ''));
+      }
+    }
+  }
+
+  Future<void> _removePromo(OrderModel order) async {
+    try {
+      AppToast.showInfo(context, 'Menghapus voucher...');
+      final updated = await _orderRepository.removePromo(order.id);
+      if (mounted) {
+        setState(() {
+          _currentOrder = updated;
+        });
+        AppToast.showSuccess(context, 'Voucher berhasil dihapus dari pesanan');
+        await _refreshDetail();
+      }
+    } catch (e) {
+      if (mounted) {
+        AppToast.showError(context, e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', ''));
+      }
+    }
+  }
+
+  Future<void> _openPromoPicker(OrderModel order) async {
+    final promoRepo = PromoRepository();
+    final userRepo = UserRepository();
+    final textController = TextEditingController();
+    String? localError;
+    bool isLoadingVouchers = true;
+    List<PromoModel> availablePromos = [];
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            if (isLoadingVouchers) {
+              Future.wait([
+                promoRepo.getPromos(category: 'Event', activeOnly: true).catchError((_) => <PromoModel>[]),
+                userRepo.getUserVouchers(activeOnly: true).catchError((_) => <PromoModel>[]),
+              ]).then((results) {
+                if (ctx.mounted) {
+                  final eventPromos = results[0];
+                  final userVouchers = results[1];
+                  final Map<String, PromoModel> combinedMap = {};
+                  for (final p in [...eventPromos, ...userVouchers]) {
+                    if (p.isValidPeriod && !p.isUsed) {
+                      combinedMap[p.code.toUpperCase()] = p;
+                    }
+                  }
+                  setSheetState(() {
+                    availablePromos = combinedMap.values.toList();
+                    isLoadingVouchers = false;
+                  });
+                }
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Row(
+                      children: [
+                        Icon(LucideIcons.ticketPercent, size: 20, color: AppColors.primary),
+                        SizedBox(width: 8),
+                        Text(
+                          'Pilih Voucher & Promo',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Input Manual Kode Voucher
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: textController,
+                            textCapitalization: TextCapitalization.characters,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1),
+                            decoration: InputDecoration(
+                              hintText: 'Ketik Kode Voucher',
+                              hintStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal, letterSpacing: 0),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final code = textController.text.trim().toUpperCase();
+                            if (code.isEmpty) return;
+
+                            Navigator.pop(sheetCtx);
+                            await _applyPromo(order, code);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          child: const Text('Terapkan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                    if (localError != null) ...[
+                      const SizedBox(height: 6),
+                      Text(localError!, style: const TextStyle(fontSize: 11, color: Color(0xFFE11D48), fontWeight: FontWeight.w500)),
+                    ],
+                    const Divider(height: 24),
+
+                    // List Voucher Tersedia
+                    const Text('Voucher Tersedia Untuk Anda', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    const SizedBox(height: 10),
+
+                    if (isLoadingVouchers)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: CircularProgressIndicator(color: AppColors.primary),
+                        ),
+                      )
+                    else if (availablePromos.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: const Column(
+                          children: [
+                            Icon(LucideIcons.ticket, size: 36, color: AppColors.textMuted),
+                            SizedBox(height: 8),
+                            Text(
+                              'Belum Ada Voucher Siap Pakai',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Tukarkan Poin Rewards di profil Anda atau gunakan kode promo event yang tersedia.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      ...availablePromos.map((promo) {
+                        final isEligible = promo.minOrderAmount == 0 || order.subtotal >= promo.minOrderAmount;
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: isEligible
+                                ? () async {
+                                    Navigator.pop(sheetCtx);
+                                    await _applyPromo(order, promo.code);
+                                  }
+                                : () {
+                                    setSheetState(() {
+                                      localError = 'Minimal belanja ${CurrencyFormatter.formatRupiah(promo.minOrderAmount)} untuk voucher ini.';
+                                    });
+                                  },
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isEligible ? AppColors.surface : AppColors.surfaceVariant.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isEligible ? AppColors.border : AppColors.border.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isEligible ? promo.color.withValues(alpha: 0.15) : AppColors.textMuted.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(promo.icon, size: 20, color: isEligible ? promo.color : AppColors.textMuted),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                promo.title,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isEligible ? AppColors.textPrimary : AppColors.textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: promo.isFreeDelivery
+                                                    ? const Color(0xFFECFDF5)
+                                                    : promo.isRewardPoint
+                                                        ? const Color(0xFFFEF3C7)
+                                                        : const Color(0xFFEFF6FF),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                promo.discountLabel,
+                                                style: TextStyle(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: promo.isFreeDelivery
+                                                      ? const Color(0xFF059669)
+                                                      : promo.isRewardPoint
+                                                          ? const Color(0xFFD97706)
+                                                          : AppColors.primary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Kode: ${promo.code} • Min. ${CurrencyFormatter.formatRupiah(promo.minOrderAmount)}',
+                                          style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1021,7 +1406,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,
                             side: const BorderSide(color: AppColors.primary),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                             minimumSize: Size.zero,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
@@ -2113,7 +2498,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Terima Kasih Banyak! 🌟',
+                'Terima Kasih Banyak!',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                 textAlign: TextAlign.center,
               ),
@@ -2154,7 +2539,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       LauncherHelper.openAppStore();
                     },
                     icon: const Icon(LucideIcons.apple, size: 16),
-                    label: const Text('Beri Rating di App Store 🍏', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: const Text('Beri Rating di App Store', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
                       side: const BorderSide(color: AppColors.border),

@@ -101,6 +101,8 @@ class _NotificationPageState extends State<NotificationPage> {
         iconColor = Colors.green;
         bgColor = Colors.green.withAlpha(25);
         break;
+      case 'payment_proof_uploaded':
+      case 'payment_proof_submitted':
       case 'topup_requested':
       case 'topup_submitted':
         iconData = LucideIcons.clock;
@@ -113,6 +115,7 @@ class _NotificationPageState extends State<NotificationPage> {
         iconColor = Colors.amber.shade800;
         bgColor = Colors.amber.withAlpha(25);
         break;
+      case 'payment_proof_rejected':
       case 'topup_rejected':
       case 'withdrawal_rejected':
       case 'payment_expired':

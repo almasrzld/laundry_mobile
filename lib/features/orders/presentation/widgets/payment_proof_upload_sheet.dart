@@ -5,8 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/app_toast.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../data/models/master_model.dart';
 import '../../../../data/models/payment_model.dart';
 import '../../../../data/repositories/payment_repository.dart';
+import '../../../../data/repositories/service_repository.dart';
 
 class PaymentProofUploadSheet extends StatefulWidget {
   final String orderId;
@@ -67,7 +69,12 @@ class PaymentProofUploadSheet extends StatefulWidget {
 
 class _PaymentProofUploadSheetState extends State<PaymentProofUploadSheet> {
   late final IPaymentRepository _paymentRepository;
+  final ServiceRepository _serviceRepository = ServiceRepository();
   final ImagePicker _picker = ImagePicker();
+
+  List<PaymentMethodModel> _bankOptions = [];
+  PaymentMethodModel? _selectedBank;
+  bool _isLoadingBanks = true;
 
   XFile? _selectedImage;
   Uint8List? _imageBytes;
@@ -79,6 +86,71 @@ class _PaymentProofUploadSheetState extends State<PaymentProofUploadSheet> {
   void initState() {
     super.initState();
     _paymentRepository = widget.paymentRepository ?? PaymentRepository();
+    _loadBankAccounts();
+  }
+
+  Future<void> _loadBankAccounts() async {
+    try {
+      final allMethods = await _serviceRepository.getPaymentMethods();
+      if (mounted) {
+        final banks = allMethods.where((m) {
+          if (!m.isActive) return false;
+          final type = (m.type ?? '').toLowerCase();
+          final name = m.name.toLowerCase();
+          final code = m.code.toLowerCase();
+          final hasAcc = (m.accountNumber ?? '').trim().isNotEmpty;
+          return (type.contains('bank') ||
+                  type.contains('transfer') ||
+                  name.contains('transfer') ||
+                  name.contains('bank') ||
+                  code.contains('transfer') ||
+                  code.contains('bank') ||
+                  hasAcc) &&
+              !code.contains('qris') &&
+              !code.contains('laundrypay') &&
+              !code.contains('tunai') &&
+              !code.contains('cash');
+        }).toList();
+
+        PaymentMethodModel? initial;
+        if (widget.bankName.isNotEmpty) {
+          try {
+            initial = banks.firstWhere(
+              (b) =>
+                  b.name.toLowerCase() == widget.bankName.toLowerCase() ||
+                  b.code.toLowerCase() == widget.bankName.toLowerCase(),
+            );
+          } catch (_) {
+            if (widget.accountNumber.isNotEmpty) {
+              initial = PaymentMethodModel(
+                id: '0',
+                name: widget.bankName,
+                code: 'manual_transfer',
+                accountNumber: widget.accountNumber,
+                accountName: widget.accountName,
+              );
+              banks.insert(0, initial);
+            }
+          }
+        }
+
+        if (initial == null && banks.isNotEmpty) {
+          initial = banks.first;
+        }
+
+        setState(() {
+          _bankOptions = banks;
+          _selectedBank = initial;
+          _isLoadingBanks = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingBanks = false;
+        });
+      }
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -222,94 +294,190 @@ class _PaymentProofUploadSheetState extends State<PaymentProofUploadSheet> {
                 ),
               ],
             ),
-            const Divider(height: 24),
+            const Divider(height: 20),
 
-            // Rekening Tujuan Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+            // Dropdown Pilihan Bank Transfer
+            if (_isLoadingBanks) ...[
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                  ),
+                ),
               ),
-              child: Column(
+              const SizedBox(height: 8),
+            ] else if (_bankOptions.isNotEmpty) ...[
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(LucideIcons.creditCard, size: 14, color: AppColors.primary),
-                          const SizedBox(width: 6),
-                          Text(
-                            widget.bankName.isNotEmpty
-                                ? 'Rekening Transfer ${widget.bankName}'
-                                : 'Total Tagihan Transfer',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        CurrencyFormatter.formatRupiah(widget.totalAmount),
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary),
-                      ),
-                    ],
+                  const Text(
+                    'Pilih Bank Tujuan Transfer:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                  if (widget.accountNumber.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.border),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<PaymentMethodModel>(
+                    initialValue: _selectedBank != null && _bankOptions.contains(_selectedBank)
+                        ? _selectedBank
+                        : _bankOptions.first,
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      prefixIcon: const Icon(LucideIcons.landmark, size: 18, color: AppColors.primary),
+                      filled: true,
+                      fillColor: AppColors.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.border),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.accountNumber,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.1,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              if (widget.accountName.isNotEmpty)
-                                Text(
-                                  'a/n ${widget.accountName}',
-                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                ),
-                            ],
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: widget.accountNumber));
-                              AppToast.showSuccess(context, 'Nomor rekening ${widget.accountNumber} berhasil disalin!');
-                            },
-                            icon: const Icon(LucideIcons.copy, size: 12, color: Colors.white),
-                            label: const Text('Salin', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              elevation: 0,
-                            ),
-                          ),
-                        ],
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                       ),
                     ),
-                  ],
+                    items: _bankOptions.map((bank) {
+                      return DropdownMenuItem<PaymentMethodModel>(
+                        value: bank,
+                        child: Text(
+                          bank.name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedBank = val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
+            ],
+
+            // Rekening Tujuan Card
+            Builder(
+              builder: (context) {
+                final activeBank = _selectedBank;
+                final effectiveBankName = activeBank?.name ?? (widget.bankName.isNotEmpty ? widget.bankName : 'Transfer Bank');
+                final effectiveAccountNumber = activeBank?.accountNumber?.isNotEmpty == true
+                    ? activeBank!.accountNumber!
+                    : widget.accountNumber;
+                final effectiveAccountName = activeBank?.accountName?.isNotEmpty == true
+                    ? activeBank!.accountName!
+                    : widget.accountName;
+
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(LucideIcons.creditCard, size: 14, color: AppColors.primary),
+                              const SizedBox(width: 6),
+                              Text(
+                                effectiveBankName.isNotEmpty
+                                    ? 'Rekening $effectiveBankName'
+                                    : 'Total Tagihan Transfer',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            CurrencyFormatter.formatRupiah(widget.totalAmount),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary),
+                          ),
+                        ],
+                      ),
+                      if (effectiveAccountNumber.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    effectiveAccountNumber,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.1,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  if (effectiveAccountName.isNotEmpty)
+                                    Text(
+                                      'a/n $effectiveAccountName',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                    ),
+                                ],
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: effectiveAccountNumber));
+                                  AppToast.showSuccess(context, 'Nomor rekening $effectiveAccountNumber berhasil disalin!');
+                                },
+                                icon: const Icon(LucideIcons.copy, size: 12, color: Colors.white),
+                                label: const Text('Salin', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  elevation: 0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Silakan transfer tepat sejumlah ${CurrencyFormatter.formatRupiah(widget.totalAmount)} ke nomor rekening $effectiveBankName di atas, lalu lampirkan foto bukti transfer di bawah.',
+                          style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary, height: 1.3),
+                        ),
+                      ] else if (!_isLoadingBanks) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Informasi nomor rekening belum tersedia. Silakan hubungi customer care kami.',
+                          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
 

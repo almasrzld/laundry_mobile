@@ -322,7 +322,8 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
     return max(0.0, total);
   }
 
-  bool get _isFreeViaPromosAndPoints => _grandTotal == 0;
+  bool get _isFreeViaPromosAndPoints =>
+      !_isKiloan && (_voucherDiscount > 0 || _effectivePointDiscount > 0) && _grandTotal == 0;
 
   // =========================================================================
   // PROMO MODAL SELECTOR
@@ -1831,7 +1832,7 @@ class _OrderCheckoutSheetState extends State<OrderCheckoutSheet> {
                     : (_isFreeViaPromosAndPoints
                         ? 'Konfirmasi Pesan (Gratis)'
                         : (!isCashSelected
-                            ? (isQrisSelected ? 'Bayar via QRIS Sekarang' : 'Bayar via ${_selectedPayment?.name ?? 'Xendit'} Sekarang')
+                            ? (isQrisSelected ? 'Bayar via QRIS Sekarang' : 'Bayar via ${_selectedPayment?.name ?? 'Pembayaran Digital'} Sekarang')
                             : 'Konfirmasi Pesan Laundry')),
                 icon: _isKiloan
                     ? LucideIcons.truck

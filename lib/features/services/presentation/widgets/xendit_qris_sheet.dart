@@ -203,7 +203,7 @@ class _XenditQrisSheetState extends State<XenditQrisSheet> {
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                         ),
                         const Text(
-                          'Verifikasi Otomatis Xendit Gateway',
+                          'Verifikasi Otomatis Pembayaran Digital',
                           style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                         ),
                       ],

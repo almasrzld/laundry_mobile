@@ -29,6 +29,8 @@ abstract class IOrderRepository {
     String? review,
     int? tipAmount,
   });
+  Future<OrderModel> applyPromo(String id, String code);
+  Future<OrderModel> removePromo(String id);
 }
 
 class OrderRepository implements IOrderRepository {
@@ -142,5 +144,34 @@ class OrderRepository implements IOrderRepository {
     } catch (_) {
       return false;
     }
+  }
+
+  @override
+  Future<OrderModel> applyPromo(String id, String code) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.orderApplyPromo(id),
+      body: {'code': code.trim().toUpperCase()},
+    );
+
+    if (response is Map) {
+      final data = response['data'] ?? response;
+      return OrderModel.fromJson(data as Map<String, dynamic>);
+    }
+
+    throw ApiException('Gagal memasang voucher promo ke pesanan');
+  }
+
+  @override
+  Future<OrderModel> removePromo(String id) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.orderRemovePromo(id),
+    );
+
+    if (response is Map) {
+      final data = response['data'] ?? response;
+      return OrderModel.fromJson(data as Map<String, dynamic>);
+    }
+
+    throw ApiException('Gagal menghapus voucher promo dari pesanan');
   }
 }

@@ -46,6 +46,8 @@ class ApiEndpoints {
   static String orderDetail(String id) => '/orders/$id';
   static const String createOrder = '/orders';
   static String orderRating(String id) => '/orders/$id/rating';
+  static String orderApplyPromo(String id) => '/orders/$id/apply-promo';
+  static String orderRemovePromo(String id) => '/orders/$id/remove-promo';
 
   // Promos & Vouchers
   static const String promos = '/promos';
