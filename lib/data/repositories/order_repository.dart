@@ -141,8 +141,9 @@ class OrderRepository implements IOrderRepository {
         },
       );
       return true;
-    } catch (_) {
-      return false;
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 

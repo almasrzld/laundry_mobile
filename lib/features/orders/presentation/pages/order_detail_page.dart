@@ -2350,6 +2350,117 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 10),
+
+                    // Info Saldo LaundryPay Pelanggan
+                    Builder(
+                      builder: (context) {
+                        final currentBal = _currentUser?.laundryPayBalance ?? 0;
+                        final tipFinal = isCustomTip
+                            ? (int.tryParse(customTipController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
+                            : selectedTip;
+                        final isInsufficient = tipFinal > 0 && currentBal < tipFinal;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(LucideIcons.wallet, size: 15, color: Color(0xFF059669)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Saldo LaundryPay: ${CurrencyFormatter.formatRupiah(currentBal)}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF065F46),
+                                      ),
+                                    ),
+                                  ),
+                                  if (currentBal < 2000)
+                                    InkWell(
+                                      onTap: () {
+                                        if (_currentUser != null) {
+                                          TopUpSheet.show(
+                                            context,
+                                            user: _currentUser!,
+                                            onTopUpSuccess: () async {
+                                              await _refreshDetail();
+                                              setModalState(() {});
+                                            },
+                                          );
+                                        }
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                        child: Text(
+                                          'Isi Saldo',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (isInsufficient) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFFFECACA)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(LucideIcons.alertCircle, size: 15, color: Color(0xFFDC2626)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Saldo (${CurrencyFormatter.formatRupiah(currentBal)}) tidak mencukupi untuk tips ${CurrencyFormatter.formatRupiah(tipFinal)}.',
+                                        style: const TextStyle(fontSize: 11, color: Color(0xFF991B1B), fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () {
+                                        if (_currentUser != null) {
+                                          TopUpSheet.show(
+                                            context,
+                                            user: _currentUser!,
+                                            onTopUpSuccess: () async {
+                                              await _refreshDetail();
+                                              setModalState(() {});
+                                            },
+                                          );
+                                        }
+                                      },
+                                      child: const Text(
+                                        'Top Up',
+                                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFFDC2626), decoration: TextDecoration.underline),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+
                     // Quick Tip Chips
                     Wrap(
                       spacing: 8,
@@ -2396,34 +2507,50 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         onPressed: isSubmitting
                             ? null
                             : () async {
-                                setModalState(() => isSubmitting = true);
+                                final currentBal = _currentUser?.laundryPayBalance ?? 0;
                                 final tipFinal = isCustomTip
                                     ? (int.tryParse(customTipController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
                                     : selectedTip;
 
-                                final success = await _orderRepository.submitRating(
-                                  order.id,
-                                  rating: selectedRating,
-                                  review: reviewController.text.trim(),
-                                  tipAmount: tipFinal,
-                                );
+                                if (tipFinal > 0 && currentBal < tipFinal) {
+                                  AppToast.showError(
+                                    context,
+                                    'Saldo LaundryPay Anda tidak mencukupi (${CurrencyFormatter.formatRupiah(currentBal)}). Silakan top up saldo atau pilih nominal tips Rp 0.',
+                                  );
+                                  return;
+                                }
 
-                                if (!sheetCtx.mounted) return;
-                                Navigator.pop(sheetCtx);
+                                setModalState(() => isSubmitting = true);
 
-                                if (!mounted) return;
+                                try {
+                                  final success = await _orderRepository.submitRating(
+                                    order.id,
+                                    rating: selectedRating,
+                                    review: reviewController.text.trim(),
+                                    tipAmount: tipFinal,
+                                  );
 
-                                if (success) {
-                                  await _refreshDetail();
+                                  if (!sheetCtx.mounted) return;
+                                  Navigator.pop(sheetCtx);
+
                                   if (!mounted) return;
-                                  AppToast.showSuccess(context, 'Ulasan & tips Anda berhasil disimpan. Terima kasih!');
 
-                                  // Jika rating tinggi (4 atau 5), ajak ulas di Play Store / App Store
-                                  if (selectedRating >= 4) {
-                                    _showAppStoreRatingDialog();
+                                  if (success) {
+                                    await _refreshDetail();
+                                    if (!mounted) return;
+                                    AppToast.showSuccess(context, 'Ulasan & tips Anda berhasil disimpan. Terima kasih!');
+
+                                    // Jika rating tinggi (4 atau 5), ajak ulas di Play Store / App Store
+                                    if (selectedRating >= 4) {
+                                      _showAppStoreRatingDialog();
+                                    }
+                                  } else {
+                                    AppToast.showError(context, 'Gagal mengirim ulasan. Silakan coba lagi.');
                                   }
-                                } else {
-                                  AppToast.showError(context, 'Gagal mengirim ulasan. Silakan coba lagi.');
+                                } catch (err) {
+                                  if (!sheetCtx.mounted) return;
+                                  setModalState(() => isSubmitting = false);
+                                  AppToast.showError(context, err.toString().replaceFirst('Exception: ', ''));
                                 }
                               },
                         style: ElevatedButton.styleFrom(

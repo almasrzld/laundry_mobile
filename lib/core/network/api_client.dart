@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../constants/api_endpoints.dart';
+import '../services/location_service.dart';
 import '../services/session_manager.dart';
 import '../services/session_service.dart';
 import 'api_exceptions.dart';
@@ -45,10 +46,22 @@ class ApiClient {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'x-platform': 'mobile',
+      'x-app-platform': 'mobile',
+      'User-Agent': 'AlmasLaundryApp/1.0 (Mobile; Flutter)',
     };
     if (_authToken != null && _authToken!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_authToken';
     }
+
+    // Lampirkan koordinat GPS real-time jika tersedia di HP
+    final pos = LocationService.lastKnownPosition;
+    if (pos != null) {
+      headers['x-latitude'] = pos.latitude.toString();
+      headers['x-longitude'] = pos.longitude.toString();
+      headers['x-client-location'] = 'GPS (${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)})';
+    }
+
     return headers;
   }
 
@@ -158,6 +171,15 @@ class ApiClient {
         request.headers['Authorization'] = 'Bearer $_authToken';
       }
       request.headers['Accept'] = 'application/json';
+      request.headers['x-platform'] = 'mobile';
+      request.headers['User-Agent'] = 'AlmasLaundryApp/1.0 (Mobile; Flutter)';
+
+      final pos = LocationService.lastKnownPosition;
+      if (pos != null) {
+        request.headers['x-latitude'] = pos.latitude.toString();
+        request.headers['x-longitude'] = pos.longitude.toString();
+        request.headers['x-client-location'] = 'GPS (${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)})';
+      }
 
       if (fields != null) {
         request.fields.addAll(fields);

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/constants/app_strings.dart';
+import 'core/services/location_service.dart';
 import 'core/services/session_manager.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/pages/login_page.dart';
@@ -37,6 +38,7 @@ void main() async {
   }
 
   SessionManager.init();
+  LocationService.initBackgroundTracker();
 
   runApp(const LaundryApp());
 }

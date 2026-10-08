@@ -21,6 +21,43 @@ class LocationResult {
 }
 
 class LocationService {
+  static Position? _lastKnownPosition;
+  static Position? get lastKnownPosition => _lastKnownPosition;
+
+  /// Memperbarui posisi GPS terkini yang tersimpan
+  static void setLastPosition(Position pos) {
+    _lastKnownPosition = pos;
+  }
+
+  /// Inisialisasi pelacakan lokasi latar belakang secara aman tanpa memblokir startup
+  static void initBackgroundTracker() {
+    Future.microtask(() async {
+      try {
+        final isEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!isEnabled) return;
+        final perm = await Geolocator.checkPermission();
+        if (perm == LocationPermission.always || perm == LocationPermission.whileInUse) {
+          _lastKnownPosition = await Geolocator.getLastKnownPosition();
+          _lastKnownPosition ??= await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 4),
+            ),
+          );
+
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              distanceFilter: 25,
+            ),
+          ).listen((pos) {
+            _lastKnownPosition = pos;
+          }, onError: (_) {});
+        }
+      } catch (_) {}
+    });
+  }
+
   /// Memeriksa status GPS dan izin lokasi, menampilkan dialog interaktif jika belum aktif
   static Future<bool> ensureLocationPermission(BuildContext context) async {
     // 1. Pada perangkat native (Android/iOS), periksa apakah GPS aktif
@@ -175,6 +212,7 @@ class LocationService {
       String? addressName;
 
       if (position != null) {
+        _lastKnownPosition = position;
         lat = position.latitude;
         lon = position.longitude;
         addressName = await reverseGeocode(lat, lon);
