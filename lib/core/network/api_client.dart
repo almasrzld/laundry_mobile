@@ -141,11 +141,17 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> delete(String endpoint) async {
+  Future<dynamic> delete(String endpoint, {Map<String, dynamic>? body}) async {
     try {
       final uri = Uri.parse('$baseUrl$endpoint');
       final headers = await _headers();
-      final response = await _client.delete(uri, headers: headers).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .delete(
+            uri,
+            headers: headers,
+            body: body != null ? jsonEncode(body) : null,
+          )
+          .timeout(const Duration(seconds: 15));
       return _processResponse(response);
     } on SocketException {
       throw NetworkException();

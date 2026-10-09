@@ -1,4 +1,4 @@
-package com.almas.laundry_app
+package com.laundry.app
 
 import io.flutter.embedding.android.FlutterActivity
 
