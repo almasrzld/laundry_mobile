@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../../firebase_options.dart';
 import '../constants/api_endpoints.dart';
 import '../network/api_client.dart';
 import '../services/session_service.dart';
@@ -13,7 +14,9 @@ import 'notification_realtime_service.dart';
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (_) {}
   // Pesan di background otomatis ditangani oleh OS Android/iOS
   debugPrint('📬 [FCM Background Message]: ${message.notification?.title} - ${message.notification?.body}');
@@ -46,10 +49,13 @@ class PushNotificationService {
     try {
       // 1. Inisialisasi Firebase Core secara aman
       try {
-        await Firebase.initializeApp();
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
         _isFirebaseReady = true;
+        debugPrint('🔥 [Firebase FCM]: Firebase Core siap digunakan (${kIsWeb ? "Web" : defaultTargetPlatform.name})');
       } catch (e) {
-        debugPrint('ℹ️ [FCM Info]: Firebase belum aktif pada platform ini atau google-services.json belum dimuat: $e');
+        debugPrint('ℹ️ [FCM Info]: Inisialisasi Firebase dilewati/gagal pada platform ini: $e');
       }
 
       // 2. Inisialisasi Flutter Local Notifications (untuk banner saat aplikasi terbuka / foreground)
@@ -80,8 +86,10 @@ class PushNotificationService {
       if (_isFirebaseReady) {
         final messaging = FirebaseMessaging.instance;
 
-        // Set background handler
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        // Set background handler (khusus native mobile)
+        if (!kIsWeb) {
+          FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        }
 
         // Minta izin notifikasi (Android 13+ & iOS)
         final settings = await messaging.requestPermission(
