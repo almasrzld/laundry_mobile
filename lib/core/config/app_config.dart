@@ -33,4 +33,22 @@ class AppConfig {
     } catch (_) {}
     return apiBaseUrl;
   }
+
+  // Firebase Cloud Messaging & Service Configuration
+  static String get firebaseApiKey => dotenv.env['FIREBASE_API_KEY'] ?? '';
+  static String get firebaseProjectId => dotenv.env['FIREBASE_PROJECT_ID'] ?? '';
+  static String get firebaseMessagingSenderId =>
+      dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '';
+  static String get firebaseStorageBucket =>
+      dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? '';
+  static String get firebaseAuthDomain =>
+      dotenv.env['FIREBASE_AUTH_DOMAIN'] ?? '';
+  static String get firebaseWebAppId => dotenv.env['FIREBASE_WEB_APP_ID'] ?? '';
+  static String get firebaseAndroidAppId =>
+      dotenv.env['FIREBASE_ANDROID_APP_ID'] ?? '';
+  static String get firebaseIosAppId => dotenv.env['FIREBASE_IOS_APP_ID'] ?? '';
+
+  /// Returns true if core Firebase configuration is present in .env
+  static bool get isFirebaseConfigured =>
+      firebaseApiKey.isNotEmpty && firebaseProjectId.isNotEmpty;
 }

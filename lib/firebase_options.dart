@@ -1,8 +1,10 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'core/config/app_config.dart';
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
+/// Dynamic [FirebaseOptions] for use with your Firebase apps.
+/// Purely reads from environment variables (.env -> AppConfig), strictly complying with AGENTS.md.
 ///
 /// Example:
 /// ```dart
@@ -29,28 +31,36 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyA2cByYKvI0vJXF_317LTtuSo3Kx_NWpHk',
-    appId: '1:507959895142:web:1c280ae1fc1c7f558df9a7',
-    messagingSenderId: '507959895142',
-    projectId: 'laundry-app-4cdd5',
-    authDomain: 'laundry-app-4cdd5.firebaseapp.com',
-    storageBucket: 'laundry-app-4cdd5.firebasestorage.app',
+  static FirebaseOptions get web => FirebaseOptions(
+    apiKey: AppConfig.firebaseApiKey,
+    appId: AppConfig.firebaseWebAppId,
+    messagingSenderId: AppConfig.firebaseMessagingSenderId,
+    projectId: AppConfig.firebaseProjectId,
+    authDomain: AppConfig.firebaseAuthDomain.isNotEmpty
+        ? AppConfig.firebaseAuthDomain
+        : null,
+    storageBucket: AppConfig.firebaseStorageBucket.isNotEmpty
+        ? AppConfig.firebaseStorageBucket
+        : null,
   );
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA2cByYKvI0vJXF_317LTtuSo3Kx_NWpHk',
-    appId: '1:507959895142:android:1c280ae1fc1c7f558df9a7',
-    messagingSenderId: '507959895142',
-    projectId: 'laundry-app-4cdd5',
-    storageBucket: 'laundry-app-4cdd5.firebasestorage.app',
+  static FirebaseOptions get android => FirebaseOptions(
+    apiKey: AppConfig.firebaseApiKey,
+    appId: AppConfig.firebaseAndroidAppId,
+    messagingSenderId: AppConfig.firebaseMessagingSenderId,
+    projectId: AppConfig.firebaseProjectId,
+    storageBucket: AppConfig.firebaseStorageBucket.isNotEmpty
+        ? AppConfig.firebaseStorageBucket
+        : null,
   );
 
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyA2cByYKvI0vJXF_317LTtuSo3Kx_NWpHk',
-    appId: '1:507959895142:ios:1c280ae1fc1c7f558df9a7',
-    messagingSenderId: '507959895142',
-    projectId: 'laundry-app-4cdd5',
-    storageBucket: 'laundry-app-4cdd5.firebasestorage.app',
+  static FirebaseOptions get ios => FirebaseOptions(
+    apiKey: AppConfig.firebaseApiKey,
+    appId: AppConfig.firebaseIosAppId,
+    messagingSenderId: AppConfig.firebaseMessagingSenderId,
+    projectId: AppConfig.firebaseProjectId,
+    storageBucket: AppConfig.firebaseStorageBucket.isNotEmpty
+        ? AppConfig.firebaseStorageBucket
+        : null,
   );
 }

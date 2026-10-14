@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../firebase_options.dart';
+import '../config/app_config.dart';
 import '../constants/api_endpoints.dart';
 import '../network/api_client.dart';
 import '../services/session_service.dart';
@@ -14,12 +16,17 @@ import 'notification_realtime_service.dart';
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    if (!dotenv.isInitialized) {
+      await dotenv.load(fileName: '.env');
+    }
+    if (AppConfig.isFirebaseConfigured) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
   } catch (_) {}
   // Pesan di background otomatis ditangani oleh OS Android/iOS
-  debugPrint('📬 [FCM Background Message]: ${message.notification?.title} - ${message.notification?.body}');
+  debugPrint('[FCM Background Message]: ${message.notification?.title} - ${message.notification?.body}');
 }
 
 class PushNotificationService {
@@ -49,13 +56,17 @@ class PushNotificationService {
     try {
       // 1. Inisialisasi Firebase Core secara aman
       try {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-        _isFirebaseReady = true;
-        debugPrint('🔥 [Firebase FCM]: Firebase Core siap digunakan (${kIsWeb ? "Web" : defaultTargetPlatform.name})');
+        if (AppConfig.isFirebaseConfigured) {
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+          _isFirebaseReady = true;
+          debugPrint('[Firebase FCM]: Firebase Core siap digunakan (${kIsWeb ? "Web" : defaultTargetPlatform.name})');
+        } else {
+          debugPrint('[FCM Info]: Konfigurasi Firebase di .env belum diisi/lengkap. Push notification FCM berjalan dalam mode lokal/standby.');
+        }
       } catch (e) {
-        debugPrint('ℹ️ [FCM Info]: Inisialisasi Firebase dilewati/gagal pada platform ini: $e');
+        debugPrint('[FCM Info]: Inisialisasi Firebase dilewati/gagal pada platform ini: $e');
       }
 
       // 2. Inisialisasi Flutter Local Notifications (untuk banner saat aplikasi terbuka / foreground)
@@ -99,29 +110,29 @@ class PushNotificationService {
           provisional: false,
         );
 
-        debugPrint('🔔 [FCM Permission Status]: ${settings.authorizationStatus}');
+        debugPrint('[FCM Permission Status]: ${settings.authorizationStatus}');
 
         // Dapatkan token FCM awal
         try {
           _cachedFcmToken = await messaging.getToken();
-          debugPrint('🔑 [FCM Token]: $_cachedFcmToken');
+          debugPrint('[FCM Token]: $_cachedFcmToken');
           if (_cachedFcmToken != null) {
             await syncTokenWithBackend(_cachedFcmToken!);
           }
         } catch (e) {
-          debugPrint('⚠️ [FCM Get Token Error]: $e');
+          debugPrint('[FCM Get Token Error]: $e');
         }
 
         // Listener token refresh
         messaging.onTokenRefresh.listen((newToken) {
           _cachedFcmToken = newToken;
-          debugPrint('🔄 [FCM Token Refreshed]: $newToken');
+          debugPrint('[FCM Token Refreshed]: $newToken');
           syncTokenWithBackend(newToken);
         });
 
         // 4. Listener saat pesan masuk di FOREGROUND (Aplikasi sedang dibuka)
         FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-          debugPrint('📲 [FCM Foreground Message]: ${message.notification?.title}');
+          debugPrint('[FCM Foreground Message]: ${message.notification?.title}');
           _showLocalNotification(message);
           // Trigger pembaruan badge lonceng secara instan
           NotificationRealtimeService.instance.refresh(isFromSse: true);
@@ -129,21 +140,21 @@ class PushNotificationService {
 
         // 5. Listener saat notifikasi di klik dari BACKGROUND
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-          debugPrint('🚀 [FCM Message Opened App]: ${message.data}');
+          debugPrint('[FCM Message Opened App]: ${message.data}');
           _handleMessageData(message.data);
         });
 
         // 6. Cek notifikasi saat aplikasi dibuka dari keadaan TERMINATED / DITUTUP TOTAL
         final initialMessage = await messaging.getInitialMessage();
         if (initialMessage != null) {
-          debugPrint('⚡ [FCM Initial Message]: ${initialMessage.data}');
+          debugPrint('[FCM Initial Message]: ${initialMessage.data}');
           _handleMessageData(initialMessage.data);
         }
       }
 
       _isInitialized = true;
     } catch (e) {
-      debugPrint('⚠️ [PushNotificationService Init Error]: $e');
+      debugPrint('[PushNotificationService Init Error]: $e');
     }
   }
 
@@ -194,7 +205,7 @@ class PushNotificationService {
     final type = data['type'];
     final orderId = data['orderId'];
 
-    debugPrint('🧭 [FCM Navigation Action]: type=$type, orderId=$orderId');
+    debugPrint('[FCM Navigation Action]: type=$type, orderId=$orderId');
     // Refresh lonceng notifikasi
     NotificationRealtimeService.instance.refresh(isFromSse: true);
   }
@@ -217,9 +228,9 @@ class PushNotificationService {
           'device_name': 'Mobile App',
         },
       );
-      debugPrint('✅ [FCM Token Synced with Backend]');
+      debugPrint('[FCM Token Synced with Backend]');
     } catch (e) {
-      debugPrint('⚠️ [FCM Token Sync Error]: $e');
+      debugPrint('[FCM Token Sync Error]: $e');
     }
   }
 
@@ -238,9 +249,9 @@ class PushNotificationService {
           'fcm_token': _cachedFcmToken,
         },
       );
-      debugPrint('🗑️ [FCM Token Removed from Backend on Logout]');
+      debugPrint('[FCM Token Removed from Backend on Logout]');
     } catch (e) {
-      debugPrint('⚠️ [FCM Token Remove Error]: $e');
+      debugPrint('[FCM Token Remove Error]: $e');
     }
   }
 }
