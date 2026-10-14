@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/security_questions.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/services/notification_realtime_service.dart';
 import '../../../../core/utils/currency_formatter.dart';
+
 import '../../../../core/utils/launcher_helper.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../data/models/master_model.dart';
@@ -13,17 +15,20 @@ import '../../../../data/models/promo_model.dart';
 import '../../../../data/models/user_model.dart';
 import '../../../../data/models/wallet_transaction_model.dart';
 import '../../../../data/repositories/auth_repository.dart';
+import '../../../../data/repositories/payment_repository.dart';
 import '../../../../data/repositories/promo_repository.dart';
 import '../../../../data/repositories/service_repository.dart';
 import '../../../../data/repositories/user_repository.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../courier/presentation/pages/courier_tasks_page.dart';
+import '../widgets/top_up_sheet.dart';
 
 class ProfilePage extends StatefulWidget {
   final IUserRepository? userRepository;
   final IAuthRepository? authRepository;
   final IPromoRepository? promoRepository;
   final IServiceRepository? serviceRepository;
+  final IPaymentRepository? paymentRepository;
 
   const ProfilePage({
     super.key,
@@ -31,6 +36,7 @@ class ProfilePage extends StatefulWidget {
     this.authRepository,
     this.promoRepository,
     this.serviceRepository,
+    this.paymentRepository,
   });
 
   @override
@@ -38,20 +44,16 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  late final IUserRepository _userRepository;
-  late final IAuthRepository _authRepository;
-  late final IPromoRepository _promoRepository;
-  late final IServiceRepository _serviceRepository;
+  late final IUserRepository _userRepository = widget.userRepository ?? UserRepository();
+  late final IAuthRepository _authRepository = widget.authRepository ?? AuthRepository();
+  late final IServiceRepository _serviceRepository = widget.serviceRepository ?? ServiceRepository();
+  late final IPromoRepository _promoRepository = widget.promoRepository ?? PromoRepository();
   UserModel _user = UserModel.empty;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _userRepository = widget.userRepository ?? UserRepository();
-    _authRepository = widget.authRepository ?? AuthRepository();
-    _promoRepository = widget.promoRepository ?? PromoRepository();
-    _serviceRepository = widget.serviceRepository ?? ServiceRepository();
     _loadProfile();
   }
 
@@ -79,76 +81,159 @@ class _ProfilePageState extends State<ProfilePage> {
     bool isSaving = false;
     String? err;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            backgroundColor: AppColors.surface,
-            title: const Text('Edit Data Profil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (err != null) ...[
-                  Text(err!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
-                  const SizedBox(height: 8),
-                ],
-                const Text('Nama Lengkap', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(hintText: 'Nama Anda'),
-                ),
-                const SizedBox(height: 12),
-                const Text('Nomor HP / WhatsApp', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(hintText: '081234567890'),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogCtx),
-                child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
               ),
-              ElevatedButton(
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        setDialogState(() => isSaving = true);
-                        try {
-                          final updated = _user.copyWith(
-                            name: nameCtrl.text.trim(),
-                            phone: phoneCtrl.text.trim(),
-                          );
-                          await _userRepository.updateProfile(updated);
-                          if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                          _loadProfile();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                backgroundColor: AppColors.success,
-                                content: Text('Profil berhasil diperbarui!'),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Edit Data Profil',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
                               ),
-                            );
-                          }
-                        } catch (e) {
-                          setDialogState(() {
-                            isSaving = false;
-                            err = e.toString();
-                          });
-                        }
-                      },
-                child: isSaving
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Simpan'),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Perbarui nama lengkap dan nomor kontak Anda',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(sheetCtx),
+                          icon: const Icon(LucideIcons.x, size: 20, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    if (err != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFECACA)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.alertCircle, size: 16, color: AppColors.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                err!,
+                                style: const TextStyle(color: AppColors.error, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    const Text('Nama Lengkap', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'Nama Anda',
+                        prefixIcon: Icon(LucideIcons.user, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Nomor HP / WhatsApp', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        hintText: '081234567890',
+                        prefixIcon: Icon(LucideIcons.phone, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    CustomButton(
+                      text: 'Simpan Perubahan',
+                      icon: LucideIcons.save,
+                      isLoading: isSaving,
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final name = nameCtrl.text.trim();
+                              final phone = phoneCtrl.text.trim();
+                              if (name.isEmpty) {
+                                setSheetState(() => err = 'Nama lengkap tidak boleh kosong');
+                                return;
+                              }
+                              setSheetState(() {
+                                isSaving = true;
+                                err = null;
+                              });
+                              try {
+                                final updated = _user.copyWith(
+                                  name: name,
+                                  phone: phone,
+                                );
+                                await _userRepository.updateProfile(updated);
+                                if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                                await _loadProfile();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      backgroundColor: AppColors.success,
+                                      content: Text('Profil berhasil diperbarui!'),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setSheetState(() {
+                                  isSaving = false;
+                                  err = e.toString().replaceAll('Exception: ', '');
+                                });
+                              }
+                            },
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           );
         },
       ),
@@ -176,38 +261,56 @@ class _ProfilePageState extends State<ProfilePage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => StatefulBuilder(
         builder: (sheetCtx, setSheetState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    hasSQ ? 'Ganti Kata Sandi' : 'Ganti Kata Sandi & Pertanyaan Keamanan',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    hasSQ
-                        ? 'Perbarui kata sandi akun Anda secara berkala untuk menjaga keamanan'
-                        : 'Perbarui kata sandi dan amankan akun dengan 2 pertanyaan keamanan',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                  const Divider(height: 24),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                hasSQ ? 'Ganti Kata Sandi' : 'Ganti Kata Sandi & Pertanyaan Keamanan',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                hasSQ
+                                    ? 'Perbarui kata sandi akun Anda secara berkala untuk menjaga keamanan'
+                                    : 'Perbarui kata sandi dan amankan akun dengan 2 pertanyaan keamanan',
+                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () => Navigator.pop(sheetCtx),
+                          icon: const Icon(LucideIcons.x, size: 20, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
 
                   if (hasSQ) ...[
                     Container(
@@ -453,11 +556,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-          );
-        },
-      ),
-    );
-  }
+          ),
+        );
+      },
+    ),
+  );
+}
 
   void _showAddressFormDialog({AddressModel? existingAddress}) {
     final isEdit = existingAddress != null;
@@ -467,142 +571,203 @@ class _ProfilePageState extends State<ProfilePage> {
     bool isSaving = false;
     String? err;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: AppColors.surface,
-          title: Text(
-            isEdit ? 'Edit Alamat Penjemputan' : 'Tambah Alamat Penjemputan',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (err != null) ...[
-                Text(err!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
-                const SizedBox(height: 8),
-              ],
-              const Text('Label Alamat', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: labelCtrl,
-                decoration: const InputDecoration(hintText: 'Contoh: Rumah, Kantor, Kos'),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Alamat Lengkap', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: isDetectingLocation
-                        ? null
-                        : () async {
-                            setDialogState(() => isDetectingLocation = true);
-                            final result = await LocationService.getCurrentLocationWithAddress(dialogCtx);
-                            setDialogState(() {
-                              isDetectingLocation = false;
-                              if (result != null) {
-                                addrCtrl.text = result.fullAddress;
-                                if (labelCtrl.text.isEmpty) {
-                                  labelCtrl.text = result.suggestedLabel;
-                                }
-                              }
-                            });
-                          },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (isDetectingLocation)
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                            )
-                          else
-                            const Icon(LucideIcons.locateFixed, size: 14, color: AppColors.primary),
-                          const SizedBox(width: 4),
                           Text(
-                            isDetectingLocation ? 'Mencari GPS...' : 'Gunakan Lokasi GPS',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            isEdit ? 'Edit Alamat Penjemputan' : 'Tambah Alamat Penjemputan',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isEdit ? 'Perbarui detail alamat penjemputan Anda' : 'Simpan alamat baru untuk pesanan laundry',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetCtx),
+                        icon: const Icon(LucideIcons.x, size: 20, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  if (err != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.alertCircle, size: 16, color: AppColors.error),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(err!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 14),
+                  ],
+                  const Text('Label Alamat', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: labelCtrl,
+                    decoration: const InputDecoration(
+                      hintText: 'Contoh: Rumah, Kantor, Kos',
+                      prefixIcon: Icon(LucideIcons.tag, size: 18),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Alamat Lengkap', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: isDetectingLocation
+                            ? null
+                            : () async {
+                                setSheetState(() => isDetectingLocation = true);
+                                final result = await LocationService.getCurrentLocationWithAddress(sheetCtx);
+                                setSheetState(() {
+                                  isDetectingLocation = false;
+                                  if (result != null) {
+                                    addrCtrl.text = result.fullAddress;
+                                    if (labelCtrl.text.isEmpty) {
+                                      labelCtrl.text = result.suggestedLabel;
+                                    }
+                                  }
+                                });
+                              },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isDetectingLocation)
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                )
+                              else
+                                const Icon(LucideIcons.locateFixed, size: 14, color: AppColors.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                isDetectingLocation ? 'Mencari GPS...' : 'Gunakan Lokasi GPS',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: addrCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      hintText: 'Jl. Nama Jalan No. XX, Kelurahan, Kecamatan, Kota',
+                      prefixIcon: Icon(LucideIcons.mapPin, size: 18),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  CustomButton(
+                    text: isEdit ? 'Simpan Perubahan' : 'Tambah Alamat',
+                    icon: isEdit ? LucideIcons.save : LucideIcons.plus,
+                    isLoading: isSaving,
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final label = labelCtrl.text.trim();
+                            final addr = addrCtrl.text.trim();
+                            if (label.isEmpty || addr.isEmpty) {
+                              setSheetState(() => err = 'Label dan alamat lengkap wajib diisi');
+                              return;
+                            }
+
+                            setSheetState(() {
+                              isSaving = true;
+                              err = null;
+                            });
+
+                            try {
+                              if (isEdit) {
+                                await _userRepository.updateAddress(
+                                  id: existingAddress.id,
+                                  label: label,
+                                  fullAddress: addr,
+                                  isDefault: existingAddress.isDefault,
+                                );
+                              } else {
+                                await _userRepository.addAddress(
+                                  label: label,
+                                  fullAddress: addr,
+                                  isDefault: _user.addresses.isEmpty,
+                                );
+                              }
+                              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                              await _loadProfile();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: AppColors.success,
+                                    content: Text(isEdit ? 'Alamat berhasil diperbarui!' : 'Alamat berhasil ditambahkan!'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setSheetState(() {
+                                isSaving = false;
+                                err = e.toString().replaceAll('Exception: ', '');
+                              });
+                            }
+                          },
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: addrCtrl,
-                maxLines: 2,
-                decoration: const InputDecoration(hintText: 'Jl. Nama Jalan No. XX, Kelurahan, Kecamatan, Kota'),
-              ),
-            ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                      final label = labelCtrl.text.trim();
-                      final addr = addrCtrl.text.trim();
-                      if (label.isEmpty || addr.isEmpty) {
-                        setDialogState(() => err = 'Label dan alamat lengkap wajib diisi');
-                        return;
-                      }
-
-                      setDialogState(() {
-                        isSaving = true;
-                        err = null;
-                      });
-
-                      try {
-                        if (isEdit) {
-                          await _userRepository.updateAddress(
-                            id: existingAddress.id,
-                            label: label,
-                            fullAddress: addr,
-                            isDefault: existingAddress.isDefault,
-                          );
-                        } else {
-                          await _userRepository.addAddress(
-                            label: label,
-                            fullAddress: addr,
-                            isDefault: _user.addresses.isEmpty,
-                          );
-                        }
-                        if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                        await _loadProfile();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: AppColors.success,
-                              content: Text(isEdit ? 'Alamat berhasil diperbarui!' : 'Alamat berhasil ditambahkan!'),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        setDialogState(() {
-                          isSaving = false;
-                          err = e.toString().replaceAll('Exception: ', '');
-                        });
-                      }
-                    },
-              child: isSaving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : Text(isEdit ? 'Simpan Perubahan' : 'Simpan'),
-            ),
-          ],
         ),
       ),
     );
@@ -880,33 +1045,6 @@ class _ProfilePageState extends State<ProfilePage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => StatefulBuilder(
         builder: (sheetCtx, setSheetState) {
-          final redeemVouchers = [
-            {
-              'title': 'Voucher Diskon Rp 10.000',
-              'desc': 'Min. transaksi Rp 30.000',
-              'code': 'DISKON10RB',
-              'points': 100,
-            },
-            {
-              'title': 'Voucher Diskon Rp 20.000',
-              'desc': 'Min. transaksi Rp 50.000',
-              'code': 'BERSIHSEGAR20',
-              'points': 200,
-            },
-            {
-              'title': 'Voucher Diskon 25% Akhir Pekan',
-              'desc': 'Min. transaksi Rp 40.000',
-              'code': 'WEEKENDSERU',
-              'points': 300,
-            },
-            {
-              'title': 'Voucher Bebas Biaya Antar-Jemput',
-              'desc': 'Min. transaksi Rp 25.000',
-              'code': 'GRATISONGKIR',
-              'points': 50,
-            },
-          ];
-
           return SizedBox(
             height: MediaQuery.of(sheetCtx).size.height * 0.85,
             child: Column(
@@ -1036,106 +1174,164 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       const SizedBox(height: 8),
 
-                      Column(
-                        children: redeemVouchers.map((v) {
-                          final pointsRequired = v['points'] as int;
-                          final hasEnough = _user.rewardPoints >= pointsRequired;
-                          final code = v['code'] as String;
+                      FutureBuilder<List<PromoModel>>(
+                        future: _promoRepository.getPromos(category: 'Reward Point', activeOnly: true),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                            );
+                          }
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: hasEnough ? const Color(0xFFFEF3C7) : AppColors.background,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    LucideIcons.ticket,
-                                    color: hasEnough ? const Color(0xFFD97706) : AppColors.textMuted,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        v['title'] as String,
-                                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '${v['desc']} • Butuh $pointsRequired Poin',
-                                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    if (!hasEnough) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Poin Anda belum cukup (${_user.rewardPoints}/$pointsRequired Poin). Pesan laundry lagi untuk kumpulkan poin!'),
-                                          backgroundColor: AppColors.error,
-                                        ),
-                                      );
-                                      return;
-                                    }
+                          final rewardPromos = (snapshot.data ?? [])
+                              .where((p) => (p.pointsRequired > 0 || p.pointsSpent > 0) && p.isValidPeriod)
+                              .toList();
 
-                                    try {
-                                      await _userRepository.redeemPoints(
-                                        points: pointsRequired,
-                                        title: 'Tukar ${v['title']} (-$pointsRequired Poin)',
-                                        description: 'Penukaran kode voucher $code',
-                                      );
-                                      await _loadProfile();
-                                      setSheetState(() {});
-                                      Clipboard.setData(ClipboardData(text: code));
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Selamat! Berhasil menukarkan $pointsRequired poin. Kode "$code" telah disalin!'),
-                                            backgroundColor: const Color(0xFF059669),
-                                            duration: const Duration(seconds: 3),
+                          if (rewardPromos.isEmpty) {
+                            return Container(
+                              padding: const EdgeInsets.all(20),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: const Column(
+                                children: [
+                                  Icon(LucideIcons.ticket, size: 28, color: AppColors.textMuted),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Belum Ada Voucher Poin Reward',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Nantikan voucher reward menarik dari Almas Laundry segera!',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return Column(
+                            children: rewardPromos.map((promo) {
+                              final pointsReq = promo.pointsRequired > 0 ? promo.pointsRequired : promo.pointsSpent;
+                              final hasEnough = _user.rewardPoints >= pointsReq;
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: hasEnough ? const Color(0xFFFEF3C7) : AppColors.background,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        promo.icon,
+                                        color: hasEnough ? const Color(0xFFD97706) : AppColors.textMuted,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            promo.title,
+                                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                                           ),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Gagal menukarkan poin: $e'), backgroundColor: AppColors.error),
-                                        );
-                                      }
-                                    }
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: hasEnough ? AppColors.primary : AppColors.border,
-                                    foregroundColor: hasEnough ? Colors.white : AppColors.textMuted,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  child: Text(
-                                    hasEnough ? 'Tukar' : '$pointsRequired Poin',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '${promo.discountLabel} • Min. ${promo.minOrderAmount > 0 ? CurrencyFormatter.formatRupiah(promo.minOrderAmount) : "Tanpa Min."}',
+                                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                          ),
+                                          if (promo.formattedPeriod.isNotEmpty)
+                                            Text(
+                                              'Berlaku: ${promo.formattedPeriod}',
+                                              style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        if (!hasEnough) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Poin Anda belum cukup (${_user.rewardPoints}/$pointsReq Poin). Pesan laundry lagi untuk kumpulkan poin!'),
+                                              backgroundColor: AppColors.error,
+                                            ),
+                                          );
+                                          return;
+                                        }
+
+                                        try {
+                                          await _userRepository.redeemPoints(
+                                            points: pointsReq,
+                                            code: promo.code,
+                                            title: promo.title,
+                                            subtitle: promo.subtitle,
+                                            category: promo.category,
+                                            benefitType: promo.benefitType,
+                                            discountType: promo.discountType,
+                                            discountAmount: promo.discountAmount,
+                                            maxDiscount: promo.maxDiscount,
+                                            minOrderAmount: promo.minOrderAmount,
+                                            promosId: promo.id,
+                                            startDate: promo.startDate,
+                                            endDate: promo.endDate,
+                                          );
+                                          await _loadProfile();
+                                          setSheetState(() {});
+                                          Clipboard.setData(ClipboardData(text: promo.code));
+                                          if (mounted && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Selamat! Berhasil menukarkan $pointsReq poin. Voucher "${promo.code}" tersimpan di akun Anda & kode telah disalin!'),
+                                                backgroundColor: const Color(0xFF059669),
+                                                duration: const Duration(seconds: 4),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted && context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Gagal menukarkan poin: $e'), backgroundColor: AppColors.error),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: hasEnough ? AppColors.primary : AppColors.border,
+                                        foregroundColor: hasEnough ? Colors.white : AppColors.textMuted,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      child: Text(
+                                        hasEnough ? 'Tukar ($pointsReq)' : '$pointsReq Poin',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              );
+                            }).toList(),
                           );
-                        }).toList(),
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -1445,6 +1641,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final searchCtrl = TextEditingController();
     String? promoNotice;
     bool isValidPromo = false;
+    bool isCheckingPromo = false;
 
     showModalBottomSheet(
       context: context,
@@ -1489,7 +1686,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              'Kupon diskon siap pakai untuk pesanan cucian Anda',
+                              'Daftar voucher diskon yang sudah Anda miliki dan siap pakai',
                               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                             ),
                           ],
@@ -1527,25 +1724,31 @@ class _ProfilePageState extends State<ProfilePage> {
                                     controller: searchCtrl,
                                     textCapitalization: TextCapitalization.characters,
                                     decoration: const InputDecoration(
-                                      hintText: 'Contoh: WEEKENDSERU',
+                                      hintText: 'Masukkan kode voucher',
                                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 ElevatedButton(
-                                  onPressed: () {
+                                  onPressed: isCheckingPromo ? null : () async {
                                     final code = searchCtrl.text.trim().toUpperCase();
                                     if (code.isEmpty) return;
-                                    setSheetState(() {
-                                      if (code == 'WEEKENDSERU' || code == 'GRATISONGKIR' || code == 'BERSIHSEGAR20') {
-                                        promoNotice = 'Selamat! Kode $code aktif & dapat digunakan saat checkout.';
+                                    setSheetState(() => isCheckingPromo = true);
+                                    try {
+                                      final v = await _userRepository.verifyVoucher(code);
+                                      setSheetState(() {
+                                        promoNotice = 'Selamat! Voucher "${v.title}" (${v.code}) aktif & siap digunakan!';
                                         isValidPromo = true;
-                                      } else {
-                                        promoNotice = 'Kode voucher "$code" tidak ditemukan atau sudah kedaluwarsa.';
+                                        isCheckingPromo = false;
+                                      });
+                                    } catch (e) {
+                                      setSheetState(() {
+                                        promoNotice = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException: ', '');
                                         isValidPromo = false;
-                                      }
-                                    });
+                                        isCheckingPromo = false;
+                                      });
+                                    }
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primary,
@@ -1553,17 +1756,24 @@ class _ProfilePageState extends State<ProfilePage> {
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
-                                  child: const Text('Cek Kode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  child: isCheckingPromo
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Text('Cek Kode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
                             if (promoNotice != null) ...[
                               const SizedBox(height: 8),
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Icon(
                                     isValidPromo ? LucideIcons.checkCircle2 : LucideIcons.alertCircle,
-                                    size: 14,
+                                    size: 15,
                                     color: isValidPromo ? const Color(0xFF059669) : AppColors.error,
                                   ),
                                   const SizedBox(width: 6),
@@ -1571,7 +1781,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     child: Text(
                                       promoNotice!,
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 11.5,
                                         fontWeight: FontWeight.w500,
                                         color: isValidPromo ? const Color(0xFF065F46) : AppColors.error,
                                       ),
@@ -1586,13 +1796,13 @@ class _ProfilePageState extends State<ProfilePage> {
                       const SizedBox(height: 16),
 
                       const Text(
-                        'Promo Aktif Almas Laundry',
+                        'Voucher Tersimpan di Akun Saya',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
 
                       FutureBuilder<List<PromoModel>>(
-                        future: _promoRepository.getPromos(),
+                        future: _userRepository.getUserVouchers(),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting) {
                             return const Center(
@@ -1603,18 +1813,45 @@ class _ProfilePageState extends State<ProfilePage> {
                             );
                           }
 
-                          final promos = snapshot.data ?? [];
-                          if (promos.isEmpty) {
+                          final vouchers = snapshot.data ?? [];
+                          if (vouchers.isEmpty) {
                             return Container(
-                              padding: const EdgeInsets.all(24),
+                              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+                              margin: const EdgeInsets.only(top: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: AppColors.border),
+                              ),
                               alignment: Alignment.center,
-                              child: const Column(
+                              child: Column(
                                 children: [
-                                  Icon(LucideIcons.ticket, size: 40, color: AppColors.textMuted),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Belum ada voucher aktif saat ini',
-                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                  const Icon(LucideIcons.ticket, size: 44, color: AppColors.textMuted),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'Belum Ada Voucher Ditukarkan',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Tukarkan Poin Rewards Anda sekarang untuk mendapatkan voucher diskon pesanan cucian!',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.pop(sheetCtx);
+                                      _showRewardsModal();
+                                    },
+                                    icon: const Icon(LucideIcons.award, size: 16),
+                                    label: const Text('Tukarkan Poin Sekarang', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1622,14 +1859,16 @@ class _ProfilePageState extends State<ProfilePage> {
                           }
 
                           return Column(
-                            children: promos.map((promo) {
+                            children: vouchers.map((promo) {
+                              final isUsed = promo.isUsed;
+
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: AppColors.surface,
+                                  color: isUsed ? const Color(0xFFF9FAFB) : AppColors.surface,
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: AppColors.border),
+                                  border: Border.all(color: isUsed ? const Color(0xFFE5E7EB) : AppColors.border),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1639,10 +1878,14 @@ class _ProfilePageState extends State<ProfilePage> {
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: AppColors.primary.withAlpha(20),
+                                            color: isUsed ? const Color(0xFFF3F4F6) : AppColors.primary.withAlpha(20),
                                             borderRadius: BorderRadius.circular(8),
                                           ),
-                                          child: Icon(promo.icon, color: AppColors.primary, size: 20),
+                                          child: Icon(
+                                            promo.icon,
+                                            color: isUsed ? AppColors.textMuted : AppColors.primary,
+                                            size: 20,
+                                          ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
@@ -1651,10 +1894,14 @@ class _ProfilePageState extends State<ProfilePage> {
                                             children: [
                                               Text(
                                                 promo.title,
-                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isUsed ? AppColors.textSecondary : AppColors.textPrimary,
+                                                ),
                                               ),
                                               Text(
-                                                promo.subtitle,
+                                                promo.subtitle.isNotEmpty ? promo.subtitle : 'Min. transaksi ${CurrencyFormatter.formatRupiah(promo.minOrderAmount)}',
                                                 style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                               ),
                                             ],
@@ -1663,18 +1910,34 @@ class _ProfilePageState extends State<ProfilePage> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFEFF6FF),
+                                            color: isUsed
+                                                ? const Color(0xFFF3F4F6)
+                                                : promo.isExpired
+                                                    ? const Color(0xFFFEF2F2)
+                                                    : const Color(0xFFEFF6FF),
                                             borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                                            border: Border.all(
+                                              color: isUsed
+                                                  ? const Color(0xFFE5E7EB)
+                                                  : promo.isExpired
+                                                      ? const Color(0xFFFECACA)
+                                                      : const Color(0xFFBFDBFE),
+                                            ),
                                           ),
                                           child: Text(
-                                            promo.discountAmount > 0
-                                                ? 'Hemat ${CurrencyFormatter.formatRupiah(promo.discountAmount)}'
-                                                : 'Spesial',
-                                            style: const TextStyle(
-                                              fontSize: 11,
+                                            isUsed
+                                                ? 'Sudah Digunakan'
+                                                : promo.isExpired
+                                                    ? 'Kedaluwarsa'
+                                                    : promo.discountLabel,
+                                            style: TextStyle(
+                                              fontSize: 10.5,
                                               fontWeight: FontWeight.bold,
-                                              color: AppColors.primary,
+                                              color: isUsed
+                                                  ? AppColors.textMuted
+                                                  : promo.isExpired
+                                                      ? AppColors.error
+                                                      : AppColors.primary,
                                             ),
                                           ),
                                         ),
@@ -1696,51 +1959,57 @@ class _ProfilePageState extends State<ProfilePage> {
                                               const Text('KODE: ', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                                               Text(
                                                 promo.code,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.bold,
                                                   letterSpacing: 0.8,
-                                                  color: AppColors.textPrimary,
+                                                  color: isUsed ? AppColors.textMuted : AppColors.textPrimary,
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
-                                        InkWell(
-                                          onTap: () {
-                                            Clipboard.setData(ClipboardData(text: promo.code));
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('Kode voucher "${promo.code}" berhasil disalin!'),
-                                                backgroundColor: AppColors.primary,
-                                                duration: const Duration(seconds: 2),
-                                              ),
-                                            );
-                                          },
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.primary,
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(LucideIcons.copy, size: 14, color: Colors.white),
-                                                SizedBox(width: 6),
-                                                Text(
-                                                  'Salin Kode',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
+                                        if (!isUsed)
+                                          InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: promo.code));
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('Kode voucher "${promo.code}" berhasil disalin!'),
+                                                  backgroundColor: AppColors.primary,
+                                                  duration: const Duration(seconds: 2),
                                                 ),
-                                              ],
+                                              );
+                                            },
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(LucideIcons.copy, size: 14, color: Colors.white),
+                                                  SizedBox(width: 6),
+                                                  Text(
+                                                    'Salin Kode',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
+                                          )
+                                        else
+                                          const Text(
+                                            'Terpakai',
+                                            style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontStyle: FontStyle.italic),
                                           ),
-                                        ),
                                       ],
                                     ),
                                   ],
@@ -1762,88 +2031,10 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _showTopUpDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: AppColors.surface,
-        title: const Row(
-          children: [
-            Icon(LucideIcons.wallet, color: AppColors.primary, size: 22),
-            SizedBox(width: 10),
-            Text('Isi Saldo LaundryPay', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Cara Mudah Isi Saldo:',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            _buildStepRow('1', 'Transfer ke Rekening Mandiri: 1234567890 (a.n. Almas Rizaldi) atau scan QRIS.'),
-            const SizedBox(height: 6),
-            _buildStepRow('2', 'Simpan bukti struk transfer atau tangkapan layar pembayaran.'),
-            const SizedBox(height: 6),
-            _buildStepRow('3', 'Kirim bukti ke WhatsApp CS Almas Laundry di +62 812-1519-9230.'),
-            const SizedBox(height: 6),
-            _buildStepRow('4', 'Saldo LaundryPay Anda akan bertambah otomatis dalam 1-3 menit!'),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(LucideIcons.info, size: 16, color: AppColors.primary),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Bebas biaya admin untuk seluruh pengisian saldo LaundryPay.',
-                      style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(const ClipboardData(text: '1234567890'));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Nomor rekening Mandiri berhasil disalin: 1234567890')),
-              );
-            },
-            child: const Text('Salin No. Rekening'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Clipboard.setData(const ClipboardData(text: '+6281215199230'));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Nomor WhatsApp CS disalin: +62 812-1519-9230. Hubungi CS untuk konfirmasi top-up.'),
-                  backgroundColor: Color(0xFF059669),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Hubungi CS'),
-          ),
-        ],
-      ),
+    TopUpSheet.show(
+      context,
+      user: _user,
+      onTopUpSuccess: _loadProfile,
     );
   }
 
@@ -1875,7 +2066,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withAlpha(20),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(LucideIcons.creditCard, color: AppColors.primary, size: 20),
@@ -1890,7 +2081,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            'Pilihan metode pembayaran resmi Almas Laundry',
+                            'Pilihan saluran pembayaran resmi Almas Laundry',
                             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                           ),
                         ],
@@ -1908,11 +2099,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
-                    // Section 1: LaundryPay
+                    // Section 1: LaundryPay Balance Card (Utama)
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF0F9FF),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            const Color(0xFFF0F9FF),
+                            AppColors.primaryLight.withValues(alpha: 0.35),
+                          ],
+                        ),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: const Color(0xFFBAE6FD)),
                       ),
@@ -1933,27 +2131,27 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ],
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFECFDF5),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(color: const Color(0xFFA7F3D0)),
                                 ),
                                 child: const Text(
-                                  'Aktif',
+                                  'Aktif • Bebas Biaya',
                                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 12),
                           const Text('Saldo Anda Saat Ini:', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                           const SizedBox(height: 2),
                           Text(
                             CurrencyFormatter.formatRupiah(_user.laundryPayBalance),
                             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 14),
                           Row(
                             children: [
                               ElevatedButton.icon(
@@ -1977,7 +2175,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   _showWalletTransactionHistorySheet(context);
                                 },
                                 icon: const Icon(LucideIcons.history, size: 14),
-                                label: const Text('Riwayat Transaksi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                label: const Text('Riwayat Mutasi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.primary,
                                   side: const BorderSide(color: AppColors.primary),
@@ -1992,122 +2190,116 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Section 2: QRIS
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withAlpha(20),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(LucideIcons.scanQrCode, color: AppColors.primary, size: 18),
-                              ),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('QRIS Instant (Semua E-Wallet & Bank)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                                    Text('Bebas biaya admin • Verifikasi otomatis', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.background,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'Mendukung GoPay, OVO, DANA, ShopeePay, LinkAja, BCA, Mandiri, BRI, BNI, dan semua mobile banking. Kode QRIS otomatis terbit pada faktur saat checkout.',
-                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Section 3: Transfer Bank & E-Wallet
-                    const Text('Transfer Bank & Dompet Digital Resmi', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    // Section 2: QRIS Otomatis
+                    const Text('Pembayaran Digital Instan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                     const SizedBox(height: 8),
+                    _buildPaymentChannelItem(
+                      icon: LucideIcons.qrCode,
+                      iconColor: const Color(0xFF7C3AED),
+                      iconBg: const Color(0xFFF3E8FF),
+                      title: 'QRIS Instant (Semua Bank & E-Wallet)',
+                      subtitle: 'BCA, Mandiri, BRI, BNI, GoPay, OVO, DANA, ShopeePay. Terbit otomatis saat checkout faktur.',
+                      badgeText: 'Otomatis',
+                    ),
+                    const SizedBox(height: 14),
 
+                    // Section 3: Transfer Rekening Bank
+                    const Text('Transfer Rekening Bank Resmi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    const SizedBox(height: 8),
                     FutureBuilder<List<PaymentMethodModel>>(
                       future: _serviceRepository.getPaymentMethods(),
                       builder: (context, snapshot) {
-                        final methods = snapshot.data
-                            ?.where((m) => m.isActive && m.type != 'cash')
-                            .toList() ?? [];
+                        final allMethods = snapshot.data ?? [];
+                        
+                        // Filter real bank transfers (exclude cash, qris, laundrypay, ewallet)
+                        final bankMethods = allMethods.where((m) {
+                          final name = m.name.toLowerCase();
+                          final code = m.code.toLowerCase();
+                          final type = (m.type ?? '').toLowerCase();
+                          final isCash = type == 'cash' || code.contains('cash') || name.contains('tunai') || name.contains('cod');
+                          final isQris = type == 'qris' || code.contains('qris') || name.contains('qris');
+                          final isWallet = type == 'ewallet' || code.contains('wallet') || name.contains('gopay') || name.contains('dana') || name.contains('ovo');
+                          final isLPay = type == 'laundrypay' || code.contains('laundrypay') || name.contains('laundrypay');
+                          return m.isActive && !isCash && !isQris && !isWallet && !isLPay;
+                        }).toList();
 
-                        if (methods.isNotEmpty) {
-                          return Column(
-                            children: methods.map((pm) {
-                              final accNum = pm.accountNumber ?? '1234567890';
-                              final accName = pm.accountName != null && pm.accountName!.isNotEmpty
-                                  ? 'a.n. ${pm.accountName}'
-                                  : 'a.n. Almas Rizaldi';
-                              return _buildBankItem(pm.name, accNum, accName);
-                            }).toList(),
-                          );
+                        if (bankMethods.isEmpty) {
+                          return const SizedBox.shrink();
                         }
 
-                        // Fallback default accounts
                         return Column(
+                          children: bankMethods.map((pm) {
+                            final accNum = pm.accountNumber ?? '-';
+                            final accName = pm.accountName != null && pm.accountName!.isNotEmpty
+                                ? 'a.n. ${pm.accountName}'
+                                : '';
+                            return _buildPaymentChannelItem(
+                              icon: LucideIcons.building2,
+                              iconColor: AppColors.primary,
+                              iconBg: AppColors.primaryLight.withValues(alpha: 0.3),
+                              title: pm.name,
+                              subtitle: accName.isNotEmpty ? '$accNum • $accName' : accNum,
+                              copyValue: accNum != '-' ? accNum : pm.name,
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Section 4: Transfer E-Wallet
+                    FutureBuilder<List<PaymentMethodModel>>(
+                      future: _serviceRepository.getPaymentMethods(),
+                      builder: (context, snapshot) {
+                        final allMethods = snapshot.data ?? [];
+                        final ewalletMethods = allMethods.where((m) {
+                          final name = m.name.toLowerCase();
+                          final code = m.code.toLowerCase();
+                          final type = (m.type ?? '').toLowerCase();
+                          final isWallet = type == 'ewallet' || code.contains('wallet') || name.contains('gopay') || name.contains('dana') || name.contains('ovo') || name.contains('shopeepay');
+                          return m.isActive && isWallet;
+                        }).toList();
+
+                        if (ewalletMethods.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildBankItem('Bank Mandiri', '1234567890', 'a.n. Almas Rizaldi'),
-                            _buildBankItem('Bank BRI', '1234567890', 'a.n. Almas Rizaldi'),
-                            _buildBankItem('GoPay / DANA', '081215199600', 'a.n. Almas Rizaldi'),
+                            const Text('Transfer E-Wallet Resmi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                            const SizedBox(height: 8),
+                            ...ewalletMethods.map((pm) {
+                              final phone = pm.accountNumber ?? '-';
+                              final name = pm.accountName != null && pm.accountName!.isNotEmpty
+                                  ? 'a.n. ${pm.accountName}'
+                                  : '';
+                              return _buildPaymentChannelItem(
+                                icon: LucideIcons.smartphone,
+                                iconColor: const Color(0xFF0284C7),
+                                iconBg: const Color(0xFFE0F2FE),
+                                title: pm.name,
+                                subtitle: name.isNotEmpty ? '$phone • $name' : phone,
+                                copyValue: phone != '-' ? phone : pm.name,
+                              );
+                            }),
                           ],
                         );
                       },
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
-                    // Section 4: Tunai / COD
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFECFDF5),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(LucideIcons.banknote, color: Color(0xFF059669), size: 20),
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Tunai / Cash on Delivery (COD)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                                Text('Bayar tunai kepada kurir saat antar-jemput atau di kasir outlet', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    // Section 5: Tunai / COD
+                    const Text('Pembayaran Tunai', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    const SizedBox(height: 8),
+                    _buildPaymentChannelItem(
+                      icon: LucideIcons.banknote,
+                      iconColor: const Color(0xFF059669),
+                      iconBg: const Color(0xFFECFDF5),
+                      title: 'Tunai / Cash on Delivery (COD)',
+                      subtitle: 'Bayar tunai langsung kepada kurir saat antar-jemput atau di kasir outlet.',
                     ),
                   ],
                 ),
@@ -2553,85 +2745,104 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildBankItem(String bankName, String accountNumber, String holderName) {
+  Widget _buildPaymentChannelItem({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    String? copyValue,
+    String? badgeText,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withAlpha(15),
-              borderRadius: BorderRadius.circular(8),
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(LucideIcons.building2, color: AppColors.primary, size: 18),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(bankName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                Text('$accountNumber • $holderName', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (badgeText != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Text(badgeText, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
+                ),
               ],
             ),
           ),
-          InkWell(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: accountNumber));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Nomor $bankName ($accountNumber) berhasil disalin!'),
-                  backgroundColor: AppColors.primary,
-                  duration: const Duration(seconds: 2),
+          if (copyValue != null && copyValue.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: copyValue));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$title ($copyValue) berhasil disalin!'),
+                    backgroundColor: AppColors.primary,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
-              );
-            },
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Row(
-                children: [
-                  Icon(LucideIcons.copy, size: 12, color: AppColors.primary),
-                  SizedBox(width: 4),
-                  Text('Salin', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                ],
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.copy, size: 12, color: AppColors.primary),
+                    SizedBox(width: 4),
+                    Text('Salin', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
-    );
-  }
-
-  Widget _buildStepRow(String num, String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 18,
-          height: 18,
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
-          child: Text(num, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 11.5, color: AppColors.textPrimary, height: 1.3))),
-      ],
     );
   }
 

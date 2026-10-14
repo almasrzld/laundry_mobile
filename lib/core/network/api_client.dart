@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../constants/api_endpoints.dart';
+import '../services/location_service.dart';
 import '../services/session_manager.dart';
 import '../services/session_service.dart';
 import 'api_exceptions.dart';
@@ -44,10 +46,22 @@ class ApiClient {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'x-platform': 'mobile',
+      'x-app-platform': 'mobile',
+      'User-Agent': 'AlmasLaundryApp/1.0 (Mobile; Flutter)',
     };
     if (_authToken != null && _authToken!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_authToken';
     }
+
+    // Lampirkan koordinat GPS real-time jika tersedia di HP
+    final pos = LocationService.lastKnownPosition;
+    if (pos != null) {
+      headers['x-latitude'] = pos.latitude.toString();
+      headers['x-longitude'] = pos.longitude.toString();
+      headers['x-client-location'] = 'GPS (${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)})';
+    }
+
     return headers;
   }
 
@@ -127,17 +141,83 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> delete(String endpoint) async {
+  Future<dynamic> delete(String endpoint, {Map<String, dynamic>? body}) async {
     try {
       final uri = Uri.parse('$baseUrl$endpoint');
       final headers = await _headers();
-      final response = await _client.delete(uri, headers: headers).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .delete(
+            uri,
+            headers: headers,
+            body: body != null ? jsonEncode(body) : null,
+          )
+          .timeout(const Duration(seconds: 15));
       return _processResponse(response);
     } on SocketException {
       throw NetworkException();
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException('Terjadi kesalahan request: $e');
+    }
+  }
+
+  Future<dynamic> uploadMultipart(
+    String endpoint, {
+    required String fieldName,
+    required List<int> fileBytes,
+    required String filename,
+    Map<String, String>? fields,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl$endpoint');
+      await _ensureToken();
+      final request = http.MultipartRequest('POST', uri);
+
+      if (_authToken != null && _authToken!.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $_authToken';
+      }
+      request.headers['Accept'] = 'application/json';
+      request.headers['x-platform'] = 'mobile';
+      request.headers['User-Agent'] = 'AlmasLaundryApp/1.0 (Mobile; Flutter)';
+
+      final pos = LocationService.lastKnownPosition;
+      if (pos != null) {
+        request.headers['x-latitude'] = pos.latitude.toString();
+        request.headers['x-longitude'] = pos.longitude.toString();
+        request.headers['x-client-location'] = 'GPS (${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)})';
+      }
+
+      if (fields != null) {
+        request.fields.addAll(fields);
+      }
+
+      MediaType? contentType;
+      final lowerName = filename.toLowerCase();
+      if (lowerName.endsWith('.png')) {
+        contentType = MediaType('image', 'png');
+      } else if (lowerName.endsWith('.webp')) {
+        contentType = MediaType('image', 'webp');
+      } else {
+        contentType = MediaType('image', 'jpeg');
+      }
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          fieldName,
+          fileBytes,
+          filename: filename,
+          contentType: contentType,
+        ),
+      );
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
+      return _processResponse(response);
+    } on SocketException {
+      throw NetworkException();
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Terjadi kesalahan saat mengunggah file: $e');
     }
   }
 

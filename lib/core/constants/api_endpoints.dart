@@ -16,22 +16,28 @@ class ApiEndpoints {
   static const String forgotPasswordVerify = '/auth/forgot-password/verify';
   static const String forgotPasswordReset = '/auth/forgot-password/reset';
 
-  // User Profile & Addresses
+  // User Profile, Addresses, Points & Vouchers
   static const String userProfile = '/user/profile';
   static const String userChangePassword = '/user/change-password';
   static const String userAddresses = '/user/addresses';
   static const String userPointsHistory = '/user/points/history';
   static const String userPointsRedeem = '/user/points/redeem';
+  static const String userVouchers = '/user/vouchers';
+  static const String verifyVoucher = '/user/vouchers/verify';
 
   // Services Endpoints
   static const String services = '/services';
   static const String serviceCategories = '/master/service-categories';
   static String serviceDetail(String id) => '/services/$id';
 
-  // Master Data (Perfumes, Units, Payment Methods, Order Statuses)
+  // Master Data (Perfumes, Units, Payment Methods, Order Statuses, Outlets, Ongkirs)
+  static const String units = '/master/units';
   static const String perfumes = '/master/perfumes';
   static const String paymentMethods = '/master/payment-methods';
   static const String orderStatuses = '/master/order-statuses';
+  static const String outlets = '/master/outlets';
+  static const String ongkirs = '/master/ongkirs';
+  static const String calculateOngkir = '/master/ongkirs/calculate';
 
   // Orders Endpoints
   static const String orders = '/orders';
@@ -40,6 +46,8 @@ class ApiEndpoints {
   static String orderDetail(String id) => '/orders/$id';
   static const String createOrder = '/orders';
   static String orderRating(String id) => '/orders/$id/rating';
+  static String orderApplyPromo(String id) => '/orders/$id/apply-promo';
+  static String orderRemovePromo(String id) => '/orders/$id/remove-promo';
 
   // Promos & Vouchers
   static const String promos = '/promos';
@@ -49,14 +57,28 @@ class ApiEndpoints {
   static const String unreadNotificationCount = '/notifications/unread-count';
   static String markNotificationRead(String id) => '/notifications/$id/read';
   static const String markAllNotificationsRead = '/notifications/read-all';
+  static const String fcmToken = '/notifications/fcm-token';
 
   // Courier Endpoints
   static const String couriers = '/couriers';
   static const String courierSummary = '/couriers/summary';
   static const String courierTasks = '/couriers/tasks';
   static const String courierTransactions = '/couriers/transactions';
+  static const String courierWithdrawals = '/couriers/withdrawals';
   static String courierUpdateTaskStatus(String id) => '/couriers/tasks/$id/status';
 
-  // Wallet Transactions
+  // Wallet Transactions & Top-Up
   static const String userWalletTransactions = '/user/wallet/transactions';
+  static const String userWalletTopup = '/user/wallet/topup';
+
+  // Payment Gateway & Manual Proof Endpoints
+  static const String uploadPaymentProof = '/payments/proof';
+  static const String payWithLaundryPay = '/payments/pay-with-laundrypay';
+  static const String switchPaymentMethod = '/payments/switch-method';
+  static String paymentStatus(String orderId) => '/payments/status/$orderId';
+  static const String createXenditPayment = '/payments/xendit/create';
+  static const String createXenditQris = '/payments/xendit/create-qr';
+  static const String createXenditTopupQris = '/payments/xendit/create-topup-qr';
+  static const String simulateXenditPayment = '/payments/xendit/simulate';
+  static String xenditPaymentStatus(String orderId) => '/payments/xendit/status/$orderId';
 }

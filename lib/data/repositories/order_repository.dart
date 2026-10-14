@@ -15,6 +15,12 @@ abstract class IOrderRepository {
     required int pricePerUnit,
     required String pickupAddress,
     required String deliveryAddress,
+    int deliveryFee = 0,
+    int discount = 0,
+    String? voucherCode,
+    int pointsRedeemed = 0,
+    String? paymentMethod,
+    String? paymentMethodCode,
     String notes = '',
   });
   Future<bool> submitRating(
@@ -23,6 +29,8 @@ abstract class IOrderRepository {
     String? review,
     int? tipAmount,
   });
+  Future<OrderModel> applyPromo(String id, String code);
+  Future<OrderModel> removePromo(String id);
 }
 
 class OrderRepository implements IOrderRepository {
@@ -78,6 +86,12 @@ class OrderRepository implements IOrderRepository {
     required int pricePerUnit,
     required String pickupAddress,
     required String deliveryAddress,
+    int deliveryFee = 0,
+    int discount = 0,
+    String? voucherCode,
+    int pointsRedeemed = 0,
+    String? paymentMethod,
+    String? paymentMethodCode,
     String notes = '',
   }) async {
     final body = {
@@ -86,6 +100,12 @@ class OrderRepository implements IOrderRepository {
       'quantity': quantity,
       'unit': unit,
       'price_per_unit': pricePerUnit,
+      'delivery_fee': deliveryFee,
+      'discount': discount,
+      if (voucherCode != null && voucherCode.trim().isNotEmpty) 'voucher_code': voucherCode.trim(),
+      if (pointsRedeemed > 0) 'points_redeemed': pointsRedeemed,
+      if (paymentMethod != null && paymentMethod.trim().isNotEmpty) 'payment_method': paymentMethod.trim(),
+      if (paymentMethodCode != null && paymentMethodCode.trim().isNotEmpty) 'payment_method_code': paymentMethodCode.trim(),
       'pickup_address': pickupAddress,
       'delivery_address': deliveryAddress,
       'notes': notes,
@@ -121,8 +141,38 @@ class OrderRepository implements IOrderRepository {
         },
       );
       return true;
-    } catch (_) {
-      return false;
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(e.toString().replaceFirst('Exception: ', ''));
     }
+  }
+
+  @override
+  Future<OrderModel> applyPromo(String id, String code) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.orderApplyPromo(id),
+      body: {'code': code.trim().toUpperCase()},
+    );
+
+    if (response is Map) {
+      final data = response['data'] ?? response;
+      return OrderModel.fromJson(data as Map<String, dynamic>);
+    }
+
+    throw ApiException('Gagal memasang voucher promo ke pesanan');
+  }
+
+  @override
+  Future<OrderModel> removePromo(String id) async {
+    final response = await _apiClient.post(
+      ApiEndpoints.orderRemovePromo(id),
+    );
+
+    if (response is Map) {
+      final data = response['data'] ?? response;
+      return OrderModel.fromJson(data as Map<String, dynamic>);
+    }
+
+    throw ApiException('Gagal menghapus voucher promo dari pesanan');
   }
 }

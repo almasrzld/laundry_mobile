@@ -14,6 +14,11 @@ abstract class IServiceRepository {
   Future<List<ServiceCategoryModel>> getCategories();
   Future<List<PerfumeModel>> getPerfumes();
   Future<List<PaymentMethodModel>> getPaymentMethods();
+  Future<CalculateOngkirResultModel?> calculateOngkir({
+    required double latitude,
+    required double longitude,
+    String? outletId,
+  });
 }
 
 class ServiceRepository implements IServiceRepository {
@@ -101,5 +106,26 @@ class ServiceRepository implements IServiceRepository {
           .toList();
     }
     return [];
+  }
+
+  @override
+  Future<CalculateOngkirResultModel?> calculateOngkir({
+    required double latitude,
+    required double longitude,
+    String? outletId,
+  }) async {
+    try {
+      final body = {
+        'latitude': latitude,
+        'longitude': longitude,
+        if (outletId != null && outletId.isNotEmpty) 'outlets_id': outletId,
+      };
+      final response = await _apiClient.post(ApiEndpoints.calculateOngkir, body: body);
+      if (response is Map) {
+        final data = response['data'] ?? response;
+        return CalculateOngkirResultModel.fromJson(data as Map<String, dynamic>);
+      }
+    } catch (_) {}
+    return null;
   }
 }

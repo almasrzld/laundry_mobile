@@ -186,7 +186,9 @@ class _OrdersPageState extends State<OrdersPage> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${order.quantity} ${order.unit} • ${CurrencyFormatter.formatDateShort(order.orderDate)}',
+                  order.isWaitingWeighing
+                      ? 'Timbang setelah selesai (${order.unit}) • ${CurrencyFormatter.formatDateShort(order.orderDate)}'
+                      : '${order.quantity} ${order.unit} • ${CurrencyFormatter.formatDateShort(order.orderDate)}',
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -207,11 +209,13 @@ class _OrdersPageState extends State<OrdersPage> with SingleTickerProviderStateM
                           ),
                         ),
                         Text(
-                          CurrencyFormatter.formatRupiah(order.totalAmount),
-                          style: const TextStyle(
-                            fontSize: 15,
+                          order.isWaitingWeighing
+                              ? 'Menunggu Ditimbang'
+                              : CurrencyFormatter.formatRupiah(order.totalAmount),
+                          style: TextStyle(
+                            fontSize: order.isWaitingWeighing ? 13 : 15,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
+                            color: order.isWaitingWeighing ? const Color(0xFFD97706) : AppColors.primary,
                           ),
                         ),
                       ],

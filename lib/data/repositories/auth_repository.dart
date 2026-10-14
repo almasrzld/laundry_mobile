@@ -1,5 +1,6 @@
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../core/services/session_service.dart';
 import '../models/user_model.dart';
 
@@ -57,6 +58,7 @@ class AuthRepository implements IAuthRepository {
       if (token.isNotEmpty) {
         _apiClient.setAuthToken(token);
         await SessionService.saveSession(token: token, user: user);
+        PushNotificationService.syncTokenWithBackend();
       }
       return user;
     }
@@ -83,14 +85,8 @@ class AuthRepository implements IAuthRepository {
 
     if (response is Map<String, dynamic>) {
       final data = response['data'] ?? response;
-      final token = data['token']?.toString() ?? '';
       final userMap = (data['user'] ?? data) as Map<String, dynamic>;
       final user = UserModel.fromJson(userMap);
-
-      if (token.isNotEmpty) {
-        _apiClient.setAuthToken(token);
-        await SessionService.saveSession(token: token, user: user);
-      }
       return user;
     }
 
@@ -193,6 +189,9 @@ class AuthRepository implements IAuthRepository {
 
   @override
   Future<void> logout() async {
+    try {
+      await PushNotificationService.removeTokenFromBackend();
+    } catch (_) {}
     _apiClient.clearAuthToken();
     await SessionService.clearSession();
   }

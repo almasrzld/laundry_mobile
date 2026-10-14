@@ -84,6 +84,7 @@ class _NotificationPageState extends State<NotificationPage> {
         bgColor = Colors.amber.withAlpha(25);
         break;
       case 'order_completed':
+      case 'withdrawal_completed':
         iconData = LucideIcons.checkCircle2;
         iconColor = Colors.green;
         bgColor = Colors.green.withAlpha(25);
@@ -93,6 +94,40 @@ class _NotificationPageState extends State<NotificationPage> {
         iconData = LucideIcons.waves;
         iconColor = AppColors.primary;
         bgColor = AppColors.primary.withAlpha(25);
+        break;
+      case 'payment_success':
+      case 'topup_success':
+        iconData = LucideIcons.wallet;
+        iconColor = Colors.green;
+        bgColor = Colors.green.withAlpha(25);
+        break;
+      case 'payment_proof_uploaded':
+      case 'payment_proof_submitted':
+      case 'topup_requested':
+      case 'topup_submitted':
+        iconData = LucideIcons.clock;
+        iconColor = const Color(0xFF0284C7);
+        bgColor = const Color(0xFF0284C7).withAlpha(25);
+        break;
+      case 'withdrawal_requested':
+      case 'withdrawal_submitted':
+        iconData = LucideIcons.arrowDownLeft;
+        iconColor = Colors.amber.shade800;
+        bgColor = Colors.amber.withAlpha(25);
+        break;
+      case 'payment_proof_rejected':
+      case 'topup_rejected':
+      case 'withdrawal_rejected':
+      case 'payment_expired':
+      case 'order_cancelled':
+        iconData = LucideIcons.triangleAlert;
+        iconColor = AppColors.error;
+        bgColor = AppColors.error.withAlpha(25);
+        break;
+      case 'courier_tip_received':
+        iconData = LucideIcons.gift;
+        iconColor = Colors.amber.shade800;
+        bgColor = Colors.amber.withAlpha(25);
         break;
       default:
         iconData = LucideIcons.bell;

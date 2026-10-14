@@ -3,7 +3,7 @@ import '../../core/network/api_client.dart';
 import '../models/promo_model.dart';
 
 abstract class IPromoRepository {
-  Future<List<PromoModel>> getPromos();
+  Future<List<PromoModel>> getPromos({String? category, bool? activeOnly, String? search});
 }
 
 class PromoRepository implements IPromoRepository {
@@ -12,8 +12,22 @@ class PromoRepository implements IPromoRepository {
   PromoRepository({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
   @override
-  Future<List<PromoModel>> getPromos() async {
-    final response = await _apiClient.get(ApiEndpoints.promos);
+  Future<List<PromoModel>> getPromos({String? category, bool? activeOnly, String? search}) async {
+    final queryParams = <String, String>{};
+    if (category != null && category.isNotEmpty && category != 'all') {
+      queryParams['category'] = category;
+    }
+    if (activeOnly != null) {
+      queryParams['active_only'] = activeOnly ? '1' : '0';
+    }
+    if (search != null && search.isNotEmpty) {
+      queryParams['search'] = search;
+    }
+
+    final response = await _apiClient.get(
+      ApiEndpoints.promos,
+      queryParams: queryParams.isNotEmpty ? queryParams : null,
+    );
     List<PromoModel> list = [];
 
     if (response is List) {
