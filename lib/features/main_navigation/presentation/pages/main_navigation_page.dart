@@ -11,6 +11,7 @@ import 'package:laundry_app/features/home/presentation/pages/home_page.dart';
 import 'package:laundry_app/features/notifications/presentation/pages/notification_page.dart';
 import 'package:laundry_app/features/orders/presentation/pages/order_detail_page.dart';
 import 'package:laundry_app/features/orders/presentation/pages/orders_page.dart';
+import 'package:laundry_app/features/auth/presentation/pages/login_page.dart';
 import 'package:laundry_app/features/profile/presentation/pages/profile_page.dart';
 import 'package:laundry_app/features/services/presentation/pages/services_page.dart';
 
@@ -63,15 +64,22 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   Future<void> _initSessionUser() async {
     try {
       final user = await SessionService.getUser();
-      if (mounted && user != null) {
-        setState(() {
-          _user = user;
-          final tabs = _getActiveTabs();
-          if (_currentIndex >= tabs.length) {
-            _currentIndex = 0;
-          }
-        });
+      if (!mounted) return;
+      if (user == null) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage(autoPromptBiometric: false)),
+          (route) => false,
+        );
+        return;
       }
+      setState(() {
+        _user = user;
+        final tabs = _getActiveTabs();
+        if (_currentIndex >= tabs.length) {
+          _currentIndex = 0;
+        }
+      });
     } catch (_) {}
   }
 
@@ -115,7 +123,11 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       return [];
     }
     final all = _getAllTabs();
-    return all.where((t) => _user!.hasPermission(t.permission)).toList();
+    final filtered = all.where((t) => _user!.hasPermission(t.permission)).toList();
+    if (filtered.isEmpty && _user!.isCustomer) {
+      return all.where((t) => t.permission == 'mobile.beranda' || t.permission == 'mobile.pesan-laundry' || t.permission == 'mobile.pesanan' || t.permission == 'mobile.profil').toList();
+    }
+    return filtered;
   }
 
   void _showInAppNotificationBanner(dynamic notif) {
