@@ -4,8 +4,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/security_questions.dart';
+import '../../../../core/services/biometric_service.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/services/notification_realtime_service.dart';
+import '../../../../core/services/session_service.dart';
 import '../../../../core/utils/currency_formatter.dart';
 
 import '../../../../core/utils/launcher_helper.dart';
@@ -51,10 +53,36 @@ class _ProfilePageState extends State<ProfilePage> {
   UserModel _user = UserModel.empty;
   bool _isLoading = true;
 
+  // Biometric State
+  bool _isBiometricSupported = false;
+  bool _isBiometricEnabled = false;
+  String _biometricName = 'Sidik Jari';
+  bool _isFaceId = false;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadBiometricStatus();
+  }
+
+  Future<void> _loadBiometricStatus() async {
+    try {
+      final supported = await BiometricService.instance.isBiometricSupported();
+      if (!supported) return;
+
+      final enabled = await BiometricService.instance.isBiometricEnabled();
+      final bioName = await BiometricService.instance.getBiometricDisplayName();
+      final isFace = await BiometricService.instance.isFaceId();
+
+      if (!mounted) return;
+      setState(() {
+        _isBiometricSupported = supported;
+        _isBiometricEnabled = enabled;
+        _biometricName = bioName;
+        _isFaceId = isFace;
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadProfile() async {
@@ -68,6 +96,7 @@ class _ProfilePageState extends State<ProfilePage> {
         });
         NotificationRealtimeService.instance.triggerRefreshRequired();
       }
+      await _loadBiometricStatus();
     } catch (_) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -1014,15 +1043,28 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           ElevatedButton(
             onPressed: () async {
+              final nav = Navigator.of(context, rootNavigator: true);
               Navigator.pop(ctx);
-              await _authRepository.logout();
-              if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                  (route) => false,
-                );
-              }
+
+              // Tampilkan dialog loading singkat
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              );
+
+              try {
+                await _authRepository.logout();
+              } catch (_) {}
+
+              nav.pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (_) => const LoginPage(autoPromptBiometric: false),
+                ),
+                (route) => false,
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
@@ -3081,6 +3123,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               : 'Ganti password & 2 pertanyaan keamanan',
                           onTap: _showChangePasswordDialog,
                         ),
+                        if (_isBiometricSupported) ...[
+                          const Divider(),
+                          _buildBiometricSwitchItem(),
+                        ],
                         if (_user.hasPermission('mobile.promo')) ...[
                           const Divider(),
                           _buildMenuItem(
@@ -3211,5 +3257,78 @@ class _ProfilePageState extends State<ProfilePage> {
       trailing: const Icon(LucideIcons.chevronRight, size: 14, color: AppColors.textMuted),
       onTap: onTap,
     );
+  }
+
+  Widget _buildBiometricSwitchItem() {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withAlpha(20),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          _isFaceId ? LucideIcons.scanFace : LucideIcons.fingerprint,
+          color: AppColors.primary,
+          size: 20,
+        ),
+      ),
+      title: Text(
+        'Login $_biometricName',
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+      ),
+      subtitle: Text(
+        _isBiometricEnabled
+            ? 'Aktif • Masuk instan tanpa kata sandi'
+            : 'Nonaktif • Ketuk untuk mengaktifkan',
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      trailing: Switch.adaptive(
+        value: _isBiometricEnabled,
+        activeTrackColor: AppColors.primaryContainer,
+        activeThumbColor: AppColors.primary,
+        onChanged: _handleBiometricToggle,
+      ),
+    );
+  }
+
+  Future<void> _handleBiometricToggle(bool val) async {
+    if (val) {
+      final authenticated = await BiometricService.instance.authenticate(
+        reason: 'Verifikasi $_biometricName Anda untuk mengaktifkan login biometrik',
+      );
+      if (!authenticated) return;
+
+      final token = await SessionService.getToken();
+      if (token != null && token.isNotEmpty) {
+        await BiometricService.instance.saveBiometricSession(token: token, user: _user);
+        if (!mounted) return;
+        setState(() => _isBiometricEnabled = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.success,
+            content: Text('Login $_biometricName berhasil diaktifkan!'),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppColors.error,
+            content: Text('Sesi login tidak ditemukan. Silakan login ulang.'),
+          ),
+        );
+      }
+    } else {
+      await BiometricService.instance.setBiometricEnabled(false);
+      if (!mounted) return;
+      setState(() => _isBiometricEnabled = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.textSecondary,
+          content: Text('Login $_biometricName telah dinonaktifkan'),
+        ),
+      );
+    }
   }
 }

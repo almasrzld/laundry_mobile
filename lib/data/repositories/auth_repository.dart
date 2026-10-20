@@ -1,11 +1,13 @@
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/biometric_service.dart';
 import '../../core/services/push_notification_service.dart';
 import '../../core/services/session_service.dart';
 import '../models/user_model.dart';
 
 abstract class IAuthRepository {
   Future<UserModel> login(String email, String password);
+  Future<UserModel> loginWithBiometrics();
   Future<UserModel> register({
     required String name,
     required String email,
@@ -58,12 +60,41 @@ class AuthRepository implements IAuthRepository {
       if (token.isNotEmpty) {
         _apiClient.setAuthToken(token);
         await SessionService.saveSession(token: token, user: user);
+        if (await BiometricService.instance.isBiometricEnabled()) {
+          await BiometricService.instance.saveBiometricSession(token: token, user: user);
+        }
         PushNotificationService.syncTokenWithBackend();
       }
       return user;
     }
 
     throw Exception('Gagal memproses respon login');
+  }
+
+  @override
+  Future<UserModel> loginWithBiometrics() async {
+    final token = await BiometricService.instance.getStoredToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Data sesi biometrik tidak ditemukan.');
+    }
+
+    _apiClient.setAuthToken(token);
+    try {
+      final response = await _apiClient.get(ApiEndpoints.me);
+      if (response is Map<String, dynamic>) {
+        final data = response['data'] ?? response;
+        final user = UserModel.fromJson(data as Map<String, dynamic>);
+        await SessionService.saveSession(token: token, user: user);
+        await BiometricService.instance.saveBiometricSession(token: token, user: user);
+        PushNotificationService.syncTokenWithBackend();
+        return user;
+      }
+      throw Exception('Gagal memverifikasi profil pengguna');
+    } catch (e) {
+      _apiClient.clearAuthToken();
+      await SessionService.clearSession();
+      rethrow;
+    }
   }
 
   @override
